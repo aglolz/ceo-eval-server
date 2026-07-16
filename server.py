@@ -41,9 +41,9 @@ JUDGES = [
 # ── Vapi Transcript Fetcher ────────────────────────────────────────────────
 
 def fetch_transcript_from_vapi(call_id, max_retries=3):
-    """Fetch transcript from Vapi API with retries.
+    """Fetch transcript and call metadata from Vapi API with retries.
 
-    Returns transcript string, or None if fetch fails after retries.
+    Returns dict with transcript, startedAt, endedAt, or None if fetch fails.
     """
     api_key = os.environ.get("VAPI_API_KEY")
     if not api_key:
@@ -55,7 +55,7 @@ def fetch_transcript_from_vapi(call_id, max_retries=3):
 
     for attempt in range(max_retries):
         try:
-            logger.info(f"Fetching transcript from Vapi (attempt {attempt + 1}/{max_retries})...")
+            logger.info(f"Fetching call data from Vapi (attempt {attempt + 1}/{max_retries})...")
             resp = requests.get(url, headers=headers, timeout=10)
             resp.raise_for_status()
 
@@ -63,7 +63,11 @@ def fetch_transcript_from_vapi(call_id, max_retries=3):
             transcript = data.get("artifact", {}).get("transcript", "")
             if transcript:
                 logger.info(f"Successfully fetched transcript ({len(transcript)} chars)")
-                return transcript
+                return {
+                    "transcript": transcript,
+                    "startedAt": data.get("startedAt", ""),
+                    "endedAt": data.get("endedAt", ""),
+                }
 
             logger.warning(f"Vapi response has no transcript, retrying...")
         except requests.RequestException as e:
@@ -139,7 +143,14 @@ def handle_webhook():
     if not transcript:
         logger.warning(f"Call {call_id}: no transcript in webhook, fetching from Vapi API...")
         time.sleep(5)  # Wait 5 seconds before first fetch
-        transcript = fetch_transcript_from_vapi(call_id, max_retries=3)
+        api_result = fetch_transcript_from_vapi(call_id, max_retries=3)
+        if api_result:
+            transcript = api_result.get("transcript", "")
+            # Update timestamps from API if they were empty in webhook
+            if not started_at:
+                started_at = api_result.get("startedAt", "")
+            if not ended_at:
+                ended_at = api_result.get("endedAt", "")
 
     if not transcript:
         logger.warning(f"Call {call_id}: no transcript found after retries")
