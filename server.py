@@ -191,6 +191,11 @@ def handle_webhook():
             if scores[name].get("scan"):
                 row[f"{name}_scan"] = json.dumps(scores[name]["scan"])
 
+    # Convert empty strings to None for date fields
+    for key in ['started_at', 'ended_at', 'scored_at']:
+        if row.get(key) == '':
+            row[key] = None
+
     try:
         supabase = create_client(
             os.environ["SUPABASE_URL"],
