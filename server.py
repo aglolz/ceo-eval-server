@@ -10,11 +10,13 @@ import os
 import json
 import re
 import logging
+import time
 from datetime import datetime
 from pathlib import Path
 
 from flask import Flask, request, jsonify
 import anthropic
+import requests
 from supabase import create_client
 
 # ── Config ──────────────────────────────────────────────────────────────────
@@ -34,6 +36,44 @@ JUDGES = [
     # {"name": "scaffolds_then_fades", "prompt": "scaffolds_then_fades.md"},
     # Add more as they're ready
 ]
+
+
+# ── Vapi Transcript Fetcher ────────────────────────────────────────────────
+
+def fetch_transcript_from_vapi(call_id, max_retries=3):
+    """Fetch transcript from Vapi API with retries.
+
+    Returns transcript string, or None if fetch fails after retries.
+    """
+    api_key = os.environ.get("VAPI_API_KEY")
+    if not api_key:
+        logger.error("VAPI_API_KEY not set")
+        return None
+
+    url = f"https://api.vapi.ai/call/{call_id}"
+    headers = {"Authorization": f"Bearer {api_key}"}
+
+    for attempt in range(max_retries):
+        try:
+            logger.info(f"Fetching transcript from Vapi (attempt {attempt + 1}/{max_retries})...")
+            resp = requests.get(url, headers=headers, timeout=10)
+            resp.raise_for_status()
+
+            data = resp.json()
+            transcript = data.get("artifact", {}).get("transcript", "")
+            if transcript:
+                logger.info(f"Successfully fetched transcript ({len(transcript)} chars)")
+                return transcript
+
+            logger.warning(f"Vapi response has no transcript, retrying...")
+        except requests.RequestException as e:
+            logger.warning(f"Vapi API error: {e}")
+
+        if attempt < max_retries - 1:
+            time.sleep(5)
+
+    logger.error(f"Failed to fetch transcript after {max_retries} attempts")
+    return None
 
 
 # ── Judge ───────────────────────────────────────────────────────────────────
@@ -95,8 +135,14 @@ def handle_webhook():
     ended_at = call.get("endedAt", "")
     transcript = call.get("artifact", {}).get("transcript", "")
 
+    # If no transcript in webhook, try fetching from Vapi API
     if not transcript:
-        logger.warning(f"Call {call_id}: no transcript found")
+        logger.warning(f"Call {call_id}: no transcript in webhook, fetching from Vapi API...")
+        time.sleep(5)  # Wait 5 seconds before first fetch
+        transcript = fetch_transcript_from_vapi(call_id, max_retries=3)
+
+    if not transcript:
+        logger.warning(f"Call {call_id}: no transcript found after retries")
         return jsonify({"status": "error", "reason": "no transcript"}), 200
 
     # Compute duration
