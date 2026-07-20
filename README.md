@@ -44,11 +44,42 @@ CREATE TABLE call_scores (
 
     feedback_q_low_bar_verdict     TEXT,
     feedback_q_low_bar_reasoning   TEXT,
-    feedback_q_low_bar_scan        JSONB
+    feedback_q_low_bar_scan        JSONB,
+
+    drives_practice_verdict     TEXT,
+    drives_practice_reasoning   TEXT,
+    drives_practice_scan        JSONB,
+
+    scaffolds_then_fades_verdict     TEXT,
+    scaffolds_then_fades_reasoning   TEXT,
+    scaffolds_then_fades_scan        JSONB,
+
+    quality_conversational_flow_verdict     TEXT,
+    quality_conversational_flow_reasoning   TEXT,
+    quality_conversational_flow_scan        JSONB
 );
 ```
 
-Add column pairs (`_verdict`, `_reasoning`, `_scan`) as you build more judges.
+On an existing database, run the incremental migration instead:
+`migrations/002_add_hero_judges.sql` adds the three hero-judge column triples.
+
+Add column triples (`_verdict`, `_reasoning`, `_scan`) as you build more judges.
+
+### Two judge prompt formats
+
+Judges are dispatched by prompt-file extension:
+
+- **`.md`** — the file IS the system prompt; the server substitutes `{transcript}`
+  inline. Output JSON: `{verdict: pass|fail, reasoning, step1_scan}`.
+  (`limits_the_load`, `feedback_q_low_bar`.)
+- **`.yaml`** — a structured judge (`dimension`/`definition`/`pass`/`fail`/`na`)
+  from the judge-suite hill-climbing harness. The server assembles the system
+  prompt and runs it **exactly** as `judge-suite/scripts/eval_harness_v2.py` does
+  (transcript in the user turn, `temperature=0`, tolerant JSON parse, retries), so
+  live scores match the calibrated dev/test numbers. Output JSON:
+  `{result: PASS|FAIL|N/A, evidence, reasoning}`, mapped to
+  `verdict` (`pass`/`fail`/`na`) with the evidence quote stored in `_scan`.
+  (`drives_practice`, `scaffolds_then_fades`, `quality_conversational_flow`.)
 
 ## Testing
 

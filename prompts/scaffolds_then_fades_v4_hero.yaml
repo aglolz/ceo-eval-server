@@ -1,0 +1,70 @@
+dimension: scaffolds_then_fades
+
+definition: >
+  Does the coach help the user build a better answer out of the user's
+  OWN material? Scaffolding is ELICITATION: the coach draws details out
+  of the user — their real history, skills, and experiences — and the
+  user then puts those details into an improved answer. The coach's
+  tool can be a template ("Start with X, then mention Y"), a
+  fill-in-the-blank structure, or simply a drawing-out prompt ("Could
+  you share a bit more about why...?", "You might mention specific
+  challenges you faced"). No formal template is required — what matters
+  is that the coach's prompting leads the user to produce better answer
+  content from their own life. The support does NOT need to fade over
+  the session; one genuinely successful scaffold is enough.
+
+pass: >
+  At least one instance anywhere in the session where the coach's
+  prompting SUCCEEDS: the coach asks for specifics, offers structure,
+  or points back at something the user already mentioned ("you could
+  mention your warehouse experience"), and the user subsequently
+  produces a SUBSTANTIVE answer built from their own real material.
+  Substantive means a concrete example or story with real specifics
+  from the user's life — what the situation was, what they actually
+  did — not just a slightly longer sentence. Pointing back at material
+  the user ALREADY stated is scaffolding from the user's own
+  information — it is NOT a model answer and NOT invention, because the
+  content originated with the user. The substantive answer does not
+  have to arrive on a same-question retry: if the coach's prompting to
+  be specific pays off on a LATER question (the user starts delivering
+  developed, specific stories after earlier coaching), that counts as
+  the scaffold landing.
+
+fail: >
+  Any ONE of the following fails the call, regardless of anything else
+  the coach did well:
+
+  MODEL ANSWER: the coach EVER delivers a complete spoken-out example
+  answer for the user to copy ("You could say: 'In my previous role, I
+  faced a situation where...'" followed by a full answer). A complete
+  recitable answer always fails, even when framed as "feel free to
+  personalize this" — the user rehearses the coach's words, not their
+  own. Two things are NOT a model answer: a short suggestion of TOPICS
+  to mention, and a short STEM anchored in the user's real background —
+  e.g. "you might say something like, 'I'm a dependable worker with
+  years of kitchen experience'" when the user has already described
+  that work history. A one-clause stem that paraphrases the user's own
+  material back to them is scaffolding, not a model answer. The fail
+  line is a COMPLETE answer, or content the user never said.
+
+  INVENTED CONTENT: the coach EVER fabricates experiences, skills, or
+  details that have NO basis in anything the user said, and presents
+  them as how the user should answer (inventing a scenario, a job
+  history, or an accomplishment and putting it in the user's mouth).
+  Referencing jobs, skills, or experiences the user already brought up
+  is not invention.
+
+  NO SUCCESSFUL SCAFFOLD: the coach's help never lands anywhere in the
+  session. This includes: the coach only praises, critiques, or moves
+  on without ever prompting for the user's specifics; the coach offers
+  scaffolds but the user declines every invitation and never once
+  produces a substantive answer; the "improvement" is only a thin
+  one-line addition or marginally longer restatement; or the retry
+  merely repeats content the coach itself supplied (the user echoing
+  the coach's suggested list is the coach's material, not the user's).
+  An offer that is never taken up, or that yields only a token
+  elaboration, is not a successful scaffold.
+
+na: >
+  Not applicable is never correct — every session presents scaffolding
+  opportunities.

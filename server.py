@@ -17,6 +17,7 @@ from pathlib import Path
 from flask import Flask, request, jsonify
 import anthropic
 import requests
+import yaml
 from supabase import create_client
 
 # ── Config ──────────────────────────────────────────────────────────────────
@@ -28,12 +29,22 @@ logger = logging.getLogger(__name__)
 MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-6")
 PROMPTS_DIR = Path(__file__).parent / "prompts"
 
-# Judge dimensions to run — add new ones here as you build them
+# Judge dimensions to run — add new ones here as you build them.
+#
+# Two prompt formats are supported, dispatched by file extension:
+#   .md   — the file IS the system prompt; "{transcript}" is substituted inline;
+#           output JSON is {verdict: pass|fail, reasoning, step1_scan}.
+#   .yaml — a structured judge (dimension/definition/pass/fail/na) assembled into
+#           a system prompt EXACTLY as judge-suite/scripts/eval_harness_v2.py does,
+#           with the transcript sent in the user turn; output JSON is
+#           {result: PASS|FAIL|N/A, evidence, reasoning}. This is the calibrated
+#           hill-climbing path, so production scores match the dev/test numbers.
 JUDGES = [
     {"name": "limits_the_load", "prompt": "limits_the_load.md"},
     {"name": "feedback_q_low_bar", "prompt": "feedback_question_low_bar.md"},
-    # {"name": "drives_practice_uptake", "prompt": "drives_practice_uptake.md"},
-    # {"name": "scaffolds_then_fades", "prompt": "scaffolds_then_fades.md"},
+    {"name": "drives_practice", "prompt": "drives_practice_v1_hero.yaml"},
+    {"name": "scaffolds_then_fades", "prompt": "scaffolds_then_fades_v4_hero.yaml"},
+    {"name": "quality_conversational_flow", "prompt": "quality_conversational_flow_v5_hero.yaml"},
     # Add more as they're ready
 ]
 
@@ -83,9 +94,20 @@ def fetch_transcript_from_vapi(call_id, max_retries=3):
 # ── Judge ───────────────────────────────────────────────────────────────────
 
 def run_judge(transcript, rubric_path):
-    """Score a transcript against a rubric. Same logic as judge.py."""
+    """Score a transcript against one judge. Dispatches on file extension:
+    .yaml -> structured hill-climbing judge (calibrated path); else the inline
+    Markdown-template judge. Both return {verdict, reasoning, scan}."""
+    rubric_path = Path(rubric_path)
+    if rubric_path.suffix in (".yaml", ".yml"):
+        return run_yaml_judge(transcript, rubric_path)
+    return run_md_judge(transcript, rubric_path)
+
+
+def run_md_judge(transcript, rubric_path):
+    """Markdown-template judge: the file IS the system prompt with a
+    {transcript} placeholder; expects {verdict, reasoning, step1_scan}."""
     client = anthropic.Anthropic()
-    rubric = Path(rubric_path).read_text()
+    rubric = rubric_path.read_text()
     system = rubric.replace("{transcript}", transcript)
 
     try:
@@ -97,14 +119,14 @@ def run_judge(transcript, rubric_path):
             messages=[{"role": "user", "content": "Evaluate and return JSON only."}],
         )
     except anthropic.APIError as e:
-        return {"verdict": "error", "reasoning": f"API error: {e}"}
+        return {"verdict": "error", "reasoning": f"API error: {e}", "scan": None}
 
     text = next((b.text for b in resp.content if b.type == "text"), "")
     m = re.search(r"\{.*\}", text, re.S)
     try:
         out = json.loads(m.group(0) if m else text)
     except Exception:
-        return {"verdict": "error", "reasoning": f"Non-JSON response: {text[:200]}"}
+        return {"verdict": "error", "reasoning": f"Non-JSON response: {text[:200]}", "scan": None}
 
     verdict = str(out.get("verdict", "")).lower()
     if verdict not in {"pass", "fail"}:
@@ -115,6 +137,111 @@ def run_judge(transcript, rubric_path):
         "reasoning": str(out.get("reasoning", "")),
         "scan": out.get("step1_scan", None),
     }
+
+
+# The structured-judge path below is ported VERBATIM from
+# judge-suite/scripts/eval_harness_v2.py (build_system_prompt, _robust_json_parse,
+# the temperature=0 + retry loop) so a judge scores a live call identically to how
+# it scored the calibration set. Do not "clean up" these to share code with the
+# Markdown path — byte-for-byte parity with the calibrated harness is the point.
+
+def build_system_prompt(p):
+    return f"""You are an expert evaluator of AI voice coaching sessions.
+
+Your task is to evaluate one specific coaching dimension:
+
+DIMENSION: {p['dimension']}
+
+DEFINITION:
+{p['definition']}
+
+PASS — what it looks like:
+{p['pass']}
+
+FAIL — what it looks like:
+{p['fail']}
+
+N/A — when to use it:
+{p['na']}
+
+Evaluate ONLY this dimension. Base your judgment solely on what is observable in the transcript.
+
+Respond in JSON only. No markdown, no code blocks, no extra text:
+{{"result": "PASS" or "FAIL" or "N/A", "evidence": "<copy the key exchange verbatim, max 200 chars>", "reasoning": "<one sentence explaining your verdict>"}}"""
+
+
+def _robust_json_parse(raw):
+    """Parse the judge's JSON tolerantly: strip code fences, drop trailing
+    commas, and fall back to extracting the first {...} block."""
+    text = raw.strip()
+    text = re.sub(r"^```(?:json)?\s*", "", text)
+    text = re.sub(r"\s*```$", "", text)
+    for candidate in (text, re.sub(r",(\s*[}\]])", r"\1", text)):
+        try:
+            return json.loads(candidate)
+        except json.JSONDecodeError:
+            pass
+    start = text.find("{")
+    if start != -1:
+        for candidate in (text[start:], re.sub(r",(\s*[}\]])", r"\1", text[start:])):
+            try:
+                obj, _ = json.JSONDecoder().raw_decode(candidate)
+                return obj
+            except json.JSONDecodeError:
+                pass
+    raise ValueError(f"could not parse JSON from: {raw[:200]!r}")
+
+
+def run_yaml_judge(transcript, prompt_path, retries=2):
+    """Structured judge — mirrors eval_harness_v2.run_judge exactly:
+    temperature=0 (auto-dropped for models that reject it), tolerant JSON parse,
+    a couple of retries. Maps result PASS/FAIL/N/A -> verdict pass/fail/na and
+    stores the verbatim evidence quote in `scan`."""
+    client = anthropic.Anthropic()
+    prompt_data = yaml.safe_load(prompt_path.read_text())
+    system_prompt = build_system_prompt(prompt_data)
+
+    last_err = None
+    send_temp = True
+    attempts = 0
+    while attempts < retries + 1:
+        kwargs = dict(
+            model=MODEL,
+            max_tokens=1024,
+            system=system_prompt,
+            messages=[{"role": "user", "content": f"TRANSCRIPT:\n\n{transcript}"}],
+        )
+        if send_temp:
+            kwargs["temperature"] = 0
+        try:
+            message = client.messages.create(**kwargs)
+        except anthropic.BadRequestError as e:
+            if send_temp and "temperature" in str(e).lower():
+                send_temp = False  # this model rejects temperature — retry without it
+                continue
+            return {"verdict": "error", "reasoning": f"API error: {e}", "scan": None}
+        except anthropic.APIError as e:
+            return {"verdict": "error", "reasoning": f"API error: {e}", "scan": None}
+
+        attempts += 1
+        raw = next((b.text for b in message.content if b.type == "text"), "").strip()
+        try:
+            data = _robust_json_parse(raw)
+        except (ValueError, json.JSONDecodeError) as e:
+            last_err = e
+            continue
+        result = str(data.get("result", "")).strip().upper()
+        if result not in ("PASS", "FAIL", "N/A"):
+            last_err = ValueError(f"bad result value: {data.get('result')!r}")
+            continue
+        verdict = {"PASS": "pass", "FAIL": "fail", "N/A": "na"}[result]
+        return {
+            "verdict": verdict,
+            "reasoning": str(data.get("reasoning", "")),
+            "scan": {"evidence": data.get("evidence", "")},
+        }
+
+    return {"verdict": "error", "reasoning": f"unparseable after {retries + 1} attempts: {last_err}", "scan": None}
 
 
 # ── Webhook Handler ─────────────────────────────────────────────────────────

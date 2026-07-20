@@ -1,0 +1,20 @@
+dimension: drives_practice_uptake
+
+definition: >
+  Did the participant attempt at least one retry or expansion of an answer
+  at any point during the session?
+
+pass: >
+  PASS requires at least one attempted retry or expansion by the user
+  on-record at any point in the session. The participant agrees to try
+  again, the coach re-asks or prompts them, and the participant makes
+  a second attempt.
+
+fail: >
+  The user never attempts a single retry or expansion. They decline
+  every offer with "next question", "move on", or similar throughout
+  the entire session.
+
+na: >
+  The call was too short to observe any feedback/retry cycle, or the
+  session ended before any retry was offered.
