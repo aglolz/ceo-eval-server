@@ -1,0 +1,78 @@
+# adapts_when_stuck — v5 HERO (champion; dev 91.3% measured / 100% effective, test 68.2%)
+# Tightens v4, which caught the fails (536/609/577 → FAIL, TNR 0.75) but over-reached:
+# the disengagement rule mislabeled a single tangent (440) and a stray interjection (242),
+# and v4 dropped two v2 recognitions (313 finished-after-answering; 358 couldn't-hear).
+# v5 corrections (precision only, same direction as the rulings):
+#   - disengagement signal must be the DOMINANT pattern of the session, not one tangent/
+#     interjection (excludes 440, 242);
+#   - "nothing more to add AFTER answering" = finished = N/A (313), distinct from "can't
+#     produce any answer WHEN ASKED" = signal (609);
+#   - "couldn't hear / I lost you" = mild genuine signal handled by re-summarizing = adapts
+#     (restores 358 PASS), while a plain "repeat the question" re-ask stays routine N/A (594).
+# Ruling encoding kept from v4: stock template/retry-offer/canned-line ≠ adaptation;
+# fail-dominant aggregation; "lost for words" is a signal (166); garbled-alone stays N/A (164).
+
+dimension: adapts_when_stuck
+
+definition: >
+  When the user shows a GENUINE stuck/frustrated/confused moment, does the coach make a
+  responsive change that is actually tailored to that moment? Evaluate the COACH's (AI:)
+  turns only. These are speech-to-text transcripts, so expect disfluencies and
+  split/merged turns. Judge the WHOLE session. Most sessions have no genuine signal and
+  the correct verdict is N/A — but when a genuine signal does occur, hold the coach to a
+  real, tailored response, not the stock script.
+
+pass: >
+  There is at least one GENUINE signal in the session AND the coach responds to EVERY
+  genuine signal with a change actually tailored to it — acknowledging the frustration,
+  reassuring / slowing down ("Take your time"), genuinely rephrasing or simplifying the
+  question, or a redirect that speaks to the moment.
+
+  A GENUINE signal is any of:
+    - frustration / agitation, incl. profanity aimed at the situation ("Fuck this"), or
+      escalating agitation;
+    - explicit inability to produce an answer WHEN ASKED — the user is stuck at the point
+      of answering ("I don't know what to say", "I got nothing to say", "I don't really
+      have an answer", "oh, man..."). NOTE: this is being stuck up front; it is NOT the
+      same as saying there is nothing more to add AFTER already giving an answer (that is
+      "finished", an N/A non-signal — see below);
+    - explicit inability to find words ("I can't find the right words", "lost for words");
+    - couldn't hear / lost the audio ("I lost you for a second") — a mild signal; the coach
+      handling it by clarifying or re-summarizing what it said counts as adapting;
+    - a SUSTAINED disengagement / deflection pattern that DOMINATES the session — the user
+      deflects or refuses to genuinely answer across most of the questions ("I just like
+      money" / "making money" / "the police is a challenge" in place of real answers). A
+      single off-topic tangent or a stray interjection in an otherwise-engaged session is
+      NOT a disengagement signal.
+
+  What does NOT count as an adaptation (these are the script, not a tailored response):
+  the standard per-question feedback template; the retry-offer ("Would you like to try
+  again or move on?"); and the stock line "I'm here to help you practice, let's focus on
+  that for now" — especially when repeated. A genuine signal met ONLY with these has been
+  ignored, not adapted to.
+
+fail: >
+  Scan the whole call. If ANY genuine signal is met only with the scripted template, the
+  retry-offer, or the same canned line (the non-adaptations listed under PASS) — i.e. the
+  coach proceeds as if the frustration/stuck/disengagement were not there — the call
+  FAILS, even if the coach handled some other moment well. One ignored genuine signal is
+  enough; do not pass on the strength of a single good moment elsewhere.
+
+na: >
+  No GENUINE signal occurs anywhere — nothing to adapt to. This is the correct,
+  most-common verdict. The following are NOT signals, and a call whose only "moments" are
+  these is N/A:
+    - a single routine clarification / re-ask: "repeat the question", "what was that?
+      sorry" (distinct from "I lost you for a second", which is a mild signal above);
+    - a brief pause: "hold on", "one second";
+    - a single off-topic remark, story, or stray interjection (a Lil Nas X news tangent, a
+      random "Hello?") in an otherwise-engaged session — one tangent is not a disengagement
+      pattern;
+    - being finished / nothing MORE to add AFTER already answering: "I don't know what else
+      to say", "that's it", "next question";
+    - simply terse, short, or low-effort answers from a user who is otherwise cooperative
+      and on-track;
+    - garbled or incoherent speech ALONE ("Person.", "Undistributed") with no explicit
+      stuck/frustrated/confused statement and no deflection pattern — do NOT infer a
+      signal from messy transcription.
+  Do NOT invent a stuck moment. If there is no genuine signal, return N/A.

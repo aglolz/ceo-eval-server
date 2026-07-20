@@ -45,6 +45,7 @@ JUDGES = [
     {"name": "drives_practice", "prompt": "drives_practice_v1_hero.yaml"},
     {"name": "scaffolds_then_fades", "prompt": "scaffolds_then_fades_v4_hero.yaml"},
     {"name": "quality_conversational_flow", "prompt": "quality_conversational_flow_v5_hero.yaml"},
+    {"name": "adapts_when_stuck", "prompt": "adapts_when_stuck_v5_hero.yaml"},
     # Add more as they're ready
 ]
 
