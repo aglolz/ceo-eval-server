@@ -1,0 +1,68 @@
+# makes_it_a_dialogue — v1 (initial)
+# Source of truth: Rubric v2 DECIDED (calibration/rubric.py -> "makes_it_a_dialogue";
+#   mirrors judge-suite/rubric/dimensions.yaml). The pass bar defines TARGET behavior —
+#   no real coach in the corpus meets it, so the only PASS examples are synthetic seeds
+#   (source_rows 9001-9004). Dev/test also carry MATCHED near-miss FAILs (9101-9104):
+#   same session, specifics engaged + retry run, but NO reflective question.
+# The single hardest call this prompt must get right: a REFLECTIVE question (invites the
+#   participant to evaluate their OWN answer/experience — "how did that feel?", "how do
+#   you think that went?") vs a CONTENT follow-up (probes the substance — "can you say
+#   more about why you enjoy that?", "did you change how you explained it?"). Only the
+#   former satisfies the pass bar; content follow-ups are the corpus's nearest misses and
+#   must NOT count as reflective questions.
+
+dimension: makes_it_a_dialogue
+
+definition: >
+  Whether the coaching is a genuine two-way exchange rather than a one-way
+  feedback broadcast. Evaluate ONLY the coach's (AI:) turns. The dimension turns
+  on one adopted criterion (from Tyler + Dane): does the coach, at least once
+  anywhere in the session, ask the participant a REFLECTIVE question — a question
+  that invites the participant to evaluate or reflect on their OWN answer,
+  performance, or experience (e.g. "How do you think that went?", "How did that
+  feel?", "What felt strong to you about that answer?") — AND does the coach's
+  feedback engage with the SPECIFICS of what this particular participant actually
+  said (their words, their example, their situation), rather than generic
+  boilerplate? These are speech-to-text transcripts, so expect disfluencies and
+  split/merged turns; judge the substance, not the transcription noise.
+
+pass: >
+  BOTH conditions hold:
+  (a) The coach asks at least ONE reflective question anywhere in the session —
+      a question that turns attention back on the participant's own answer or
+      how it felt/went ("How did that feel?", "How do you think that went?",
+      "How did that answer feel compared to your first one?", "How do you want an
+      interviewer to hear that?"). One such question anywhere is enough; it need
+      not recur.
+  (b) The coach's feedback engages the SPECIFICS of what the participant said —
+      it quotes or builds on their actual content (their example, their phrasing,
+      their situation), not just a template that would fit any answer.
+  A coach that does both — even while keeping the reflective question sparing
+  (asking it once or a few times, not after every turn) — PASSES.
+
+fail: >
+  Either condition is missing. The common shapes:
+    1. NO reflective question anywhere. The coach engages the participant's
+       content (possibly richly, possibly with retries) and may ask CONTENT
+       follow-ups — questions probing the substance of the answer ("Could you
+       share more about why you enjoy working alone?", "Did you change how you
+       explained the concept?") — but never turns attention back on the
+       participant's own performance/experience. Content follow-ups are NOT
+       reflective questions; this is the corpus's nearest miss and it FAILS.
+    2. One-way templates: feedback turns are generic or numbered advice that
+       never engages the specifics of the participant's answer beyond the
+       boilerplate "would you like to try again or move to the next question?"
+       closer.
+    3. ONLY reflective questions with no substantive engagement — the coach asks
+       "how did that feel?" but never actually works with what the participant
+       said.
+  A single reflective question is required for PASS: if none appears anywhere in
+  the session, the verdict is FAIL even when the content engagement is strong.
+
+na: >
+  Dialogue quality is observable in essentially every real coaching session, so
+  N/A should be rare. Use N/A ONLY when the call ends before any coaching feedback
+  occurs at all — e.g. the call dies during ID verification or consent, or is
+  truncated before the coach delivers a single feedback turn — so there is simply
+  no coaching exchange to assess. If any coaching feedback happens, score PASS or
+  FAIL, not N/A.

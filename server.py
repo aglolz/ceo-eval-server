@@ -48,6 +48,7 @@ JUDGES = [
     {"name": "adapts_when_stuck", "prompt": "adapts_when_stuck_v5_hero.yaml"},
     {"name": "reentry_appropriate_framing", "prompt": "reentry_appropriate_framing_v4_hero.yaml"},
     {"name": "pii", "prompt": "pii_v4_hero.yaml"},
+    {"name": "makes_it_a_dialogue", "prompt": "makes_it_a_dialogue_v1.yaml"},
     # Add more as they're ready
 ]
 
