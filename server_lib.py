@@ -236,7 +236,7 @@ def handle_call_webhook(payload, judges, table_name):
     # Verify this is an end-of-call report
     msg_type = payload.get("message", {}).get("type", "")
     if msg_type != "end-of-call-report":
-        logger.info(f"Ignoring message type: {msg_type}")
+        logger.info(f"Ignoring message type: {msg_type} | Full keys: {list(payload.get('message', {}).keys())}")
         return {"status": "ignored", "type": msg_type}, 200
 
     # Extract call data
