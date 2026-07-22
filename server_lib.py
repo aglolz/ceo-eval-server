@@ -12,6 +12,7 @@ import logging
 import time
 from datetime import datetime
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import anthropic
 import requests
@@ -275,19 +276,26 @@ def handle_call_webhook(payload, judges, table_name):
 
     logger.info(f"Call {call_id}: scoring {len(transcript)} chars across {len(judges)} judges on table '{table_name}'")
 
-    # Run each judge
-    scores = {}
-    for j in judges:
+    # Run judges in parallel
+    def run_single_judge(judge_dict):
+        """Run one judge and return (judge_name, result)."""
+        j = judge_dict
         rubric_path = PROMPTS_DIR / j["prompt"]
         if not rubric_path.exists():
             logger.error(f"Prompt not found: {rubric_path}")
-            scores[j["name"]] = {"verdict": "error", "reasoning": "prompt file missing"}
-            continue
+            return (j["name"], {"verdict": "error", "reasoning": "prompt file missing"})
 
         logger.info(f"  Running {j['name']}...")
         result = run_judge(transcript, rubric_path)
-        scores[j["name"]] = result
         logger.info(f"  {j['name']}: {result['verdict']}")
+        return (j["name"], result)
+
+    scores = {}
+    with ThreadPoolExecutor(max_workers=len(judges)) as executor:
+        futures = {executor.submit(run_single_judge, j): j["name"] for j in judges}
+        for future in as_completed(futures):
+            judge_name, result = future.result()
+            scores[judge_name] = result
 
     # Write to Supabase
     row = {
