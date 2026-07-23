@@ -8,6 +8,7 @@ import this and define their JUDGES list and TABLE name.
 import os
 import json
 import re
+import random
 import logging
 import time
 from datetime import datetime
@@ -218,6 +219,40 @@ def run_yaml_judge(transcript, prompt_path, retries=2):
         }
 
     return {"verdict": "error", "reasoning": f"unparseable after {retries + 1} attempts: {last_err}", "scan": None}
+
+
+# ── A/B Routing (assistant-request) ────────────────────────────────────────
+#
+# For the 50/50 experiment an inbound phone number points at this server with
+# no static assistantId, so Vapi sends an `assistant-request` and expects the
+# chosen assistant within 7.5s (telephony cap) — never score on this path. The
+# returned assistantId reappears on the later end-of-call-report, so the arm is
+# self-logging via the existing assistant_id column (no schema change).
+#
+# Env: ARM_A_ASSISTANT_ID / ARM_B_ASSISTANT_ID — the two arms.
+#      AB_FORCE_ARM = "A" | "B" — kill switch pinning all traffic to one arm.
+
+def handle_assistant_request(payload):
+    """Pick an A/B arm and return its assistantId fast. Returns (dict, status)."""
+    arms = {
+        "A": os.environ.get("ARM_A_ASSISTANT_ID", ""),
+        "B": os.environ.get("ARM_B_ASSISTANT_ID", ""),
+    }
+    force = os.environ.get("AB_FORCE_ARM", "").strip().upper()
+    arm = force if force in ("A", "B") else random.choice(["A", "B"])
+    assistant_id = arms.get(arm, "")
+
+    call_id = payload.get("message", {}).get("call", {}).get("id", "unknown")
+    if not assistant_id:
+        # Don't 500 — an errored body lets Vapi fall back to any
+        # fallbackDestination configured on the number.
+        logger.error(f"assistant-request {call_id}: no id for arm {arm} "
+                     f"(set ARM_{arm}_ASSISTANT_ID)")
+        return {"error": f"no assistant configured for arm {arm}"}, 200
+
+    logger.info(f"assistant-request {call_id}: -> arm {arm} ({assistant_id})"
+                + (" [forced]" if force in ("A", "B") else ""))
+    return {"assistantId": assistant_id}, 200
 
 
 # ── Webhook Handler ────────────────────────────────────────────────────────

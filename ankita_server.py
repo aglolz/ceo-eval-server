@@ -10,7 +10,7 @@ Deploy to Railway:
 import os
 import logging
 from flask import Flask, request, jsonify
-from server_lib import handle_call_webhook
+from server_lib import handle_call_webhook, handle_assistant_request
 
 app = Flask(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -34,9 +34,14 @@ TABLE = os.environ.get("SUPABASE_TABLE", "ankita_test_calls")
 
 @app.route("/webhook", methods=["POST"])
 def handle_webhook():
-    """Receive end-of-call-report from Vapi, score, write to Supabase."""
+    """Vapi webhook. A/B-route on assistant-request (must answer within 7.5s);
+    otherwise score the end-of-call-report and write to Supabase."""
     payload = request.get_json(force=True)
-    response, status = handle_call_webhook(payload, JUDGES, TABLE)
+    msg_type = payload.get("message", {}).get("type", "")
+    if msg_type == "assistant-request":
+        response, status = handle_assistant_request(payload)
+    else:
+        response, status = handle_call_webhook(payload, JUDGES, TABLE)
     return jsonify(response), status
 
 
