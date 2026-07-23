@@ -80,40 +80,51 @@ def run_judge(transcript, rubric_path):
     return run_md_judge(transcript, rubric_path)
 
 
-def run_md_judge(transcript, rubric_path):
+def run_md_judge(transcript, rubric_path, retries=2):
     """Markdown-template judge: the file IS the system prompt with a
-    {transcript} placeholder; expects {verdict, reasoning, step1_scan}."""
+    {transcript} placeholder; expects {verdict, reasoning, step1_scan}.
+
+    Hardened to match run_yaml_judge: uses _robust_json_parse (strips ```json
+    fences / tolerates trailing commas / extracts the first object) and retries
+    a couple of times. The old naive re.search + json.loads intermittently
+    failed (~1-in-7) on longer or fenced model outputs — see the 'error'
+    verdicts on limits_the_load — even when the JSON was well-formed."""
     client = anthropic.Anthropic()
     rubric = rubric_path.read_text()
     system = rubric.replace("{transcript}", transcript)
 
-    try:
-        resp = client.messages.create(
-            model=MODEL,
-            max_tokens=1024,
-            temperature=0,
-            system=system,
-            messages=[{"role": "user", "content": "Evaluate and return JSON only."}],
-        )
-    except anthropic.APIError as e:
-        return {"verdict": "error", "reasoning": f"API error: {e}", "scan": None}
+    last_err = None
+    for _ in range(retries + 1):
+        try:
+            resp = client.messages.create(
+                model=MODEL,
+                max_tokens=1536,
+                temperature=0,
+                system=system,
+                messages=[{"role": "user", "content": "Evaluate and return JSON only."}],
+            )
+        except anthropic.APIError as e:
+            return {"verdict": "error", "reasoning": f"API error: {e}", "scan": None}
 
-    text = next((b.text for b in resp.content if b.type == "text"), "")
-    m = re.search(r"\{.*\}", text, re.S)
-    try:
-        out = json.loads(m.group(0) if m else text)
-    except Exception:
-        return {"verdict": "error", "reasoning": f"Non-JSON response: {text[:200]}", "scan": None}
+        text = next((b.text for b in resp.content if b.type == "text"), "").strip()
+        try:
+            out = _robust_json_parse(text)
+        except (ValueError, json.JSONDecodeError) as e:
+            last_err = f"Non-JSON response: {text[:200]}"
+            continue
 
-    verdict = str(out.get("verdict", "")).lower()
-    if verdict not in {"pass", "fail"}:
-        verdict = "error"
+        verdict = str(out.get("verdict", "")).lower()
+        if verdict not in {"pass", "fail"}:
+            last_err = f"bad verdict value: {out.get('verdict')!r}"
+            continue
 
-    return {
-        "verdict": verdict,
-        "reasoning": str(out.get("reasoning", "")),
-        "scan": out.get("step1_scan", None),
-    }
+        return {
+            "verdict": verdict,
+            "reasoning": str(out.get("reasoning", "")),
+            "scan": out.get("step1_scan", None),
+        }
+
+    return {"verdict": "error", "reasoning": last_err or "unparseable", "scan": None}
 
 
 # The structured-judge path below is ported VERBATIM from
