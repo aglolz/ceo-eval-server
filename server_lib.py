@@ -8,6 +8,7 @@ import this and define their JUDGES list and TABLE name.
 import os
 import json
 import re
+import random
 import logging
 import time
 from datetime import datetime
@@ -79,40 +80,51 @@ def run_judge(transcript, rubric_path):
     return run_md_judge(transcript, rubric_path)
 
 
-def run_md_judge(transcript, rubric_path):
+def run_md_judge(transcript, rubric_path, retries=2):
     """Markdown-template judge: the file IS the system prompt with a
-    {transcript} placeholder; expects {verdict, reasoning, step1_scan}."""
+    {transcript} placeholder; expects {verdict, reasoning, step1_scan}.
+
+    Hardened to match run_yaml_judge: uses _robust_json_parse (strips ```json
+    fences / tolerates trailing commas / extracts the first object) and retries
+    a couple of times. The old naive re.search + json.loads intermittently
+    failed (~1-in-7) on longer or fenced model outputs — see the 'error'
+    verdicts on limits_the_load — even when the JSON was well-formed."""
     client = anthropic.Anthropic()
     rubric = rubric_path.read_text()
     system = rubric.replace("{transcript}", transcript)
 
-    try:
-        resp = client.messages.create(
-            model=MODEL,
-            max_tokens=1024,
-            temperature=0,
-            system=system,
-            messages=[{"role": "user", "content": "Evaluate and return JSON only."}],
-        )
-    except anthropic.APIError as e:
-        return {"verdict": "error", "reasoning": f"API error: {e}", "scan": None}
+    last_err = None
+    for _ in range(retries + 1):
+        try:
+            resp = client.messages.create(
+                model=MODEL,
+                max_tokens=1536,
+                temperature=0,
+                system=system,
+                messages=[{"role": "user", "content": "Evaluate and return JSON only."}],
+            )
+        except anthropic.APIError as e:
+            return {"verdict": "error", "reasoning": f"API error: {e}", "scan": None}
 
-    text = next((b.text for b in resp.content if b.type == "text"), "")
-    m = re.search(r"\{.*\}", text, re.S)
-    try:
-        out = json.loads(m.group(0) if m else text)
-    except Exception:
-        return {"verdict": "error", "reasoning": f"Non-JSON response: {text[:200]}", "scan": None}
+        text = next((b.text for b in resp.content if b.type == "text"), "").strip()
+        try:
+            out = _robust_json_parse(text)
+        except (ValueError, json.JSONDecodeError) as e:
+            last_err = f"Non-JSON response: {text[:200]}"
+            continue
 
-    verdict = str(out.get("verdict", "")).lower()
-    if verdict not in {"pass", "fail"}:
-        verdict = "error"
+        verdict = str(out.get("verdict", "")).lower()
+        if verdict not in {"pass", "fail"}:
+            last_err = f"bad verdict value: {out.get('verdict')!r}"
+            continue
 
-    return {
-        "verdict": verdict,
-        "reasoning": str(out.get("reasoning", "")),
-        "scan": out.get("step1_scan", None),
-    }
+        return {
+            "verdict": verdict,
+            "reasoning": str(out.get("reasoning", "")),
+            "scan": out.get("step1_scan", None),
+        }
+
+    return {"verdict": "error", "reasoning": last_err or "unparseable", "scan": None}
 
 
 # The structured-judge path below is ported VERBATIM from
@@ -218,6 +230,40 @@ def run_yaml_judge(transcript, prompt_path, retries=2):
         }
 
     return {"verdict": "error", "reasoning": f"unparseable after {retries + 1} attempts: {last_err}", "scan": None}
+
+
+# ── A/B Routing (assistant-request) ────────────────────────────────────────
+#
+# For the 50/50 experiment an inbound phone number points at this server with
+# no static assistantId, so Vapi sends an `assistant-request` and expects the
+# chosen assistant within 7.5s (telephony cap) — never score on this path. The
+# returned assistantId reappears on the later end-of-call-report, so the arm is
+# self-logging via the existing assistant_id column (no schema change).
+#
+# Env: ARM_A_ASSISTANT_ID / ARM_B_ASSISTANT_ID — the two arms.
+#      AB_FORCE_ARM = "A" | "B" — kill switch pinning all traffic to one arm.
+
+def handle_assistant_request(payload):
+    """Pick an A/B arm and return its assistantId fast. Returns (dict, status)."""
+    arms = {
+        "A": os.environ.get("ARM_A_ASSISTANT_ID", ""),
+        "B": os.environ.get("ARM_B_ASSISTANT_ID", ""),
+    }
+    force = os.environ.get("AB_FORCE_ARM", "").strip().upper()
+    arm = force if force in ("A", "B") else random.choice(["A", "B"])
+    assistant_id = arms.get(arm, "")
+
+    call_id = payload.get("message", {}).get("call", {}).get("id", "unknown")
+    if not assistant_id:
+        # Don't 500 — an errored body lets Vapi fall back to any
+        # fallbackDestination configured on the number.
+        logger.error(f"assistant-request {call_id}: no id for arm {arm} "
+                     f"(set ARM_{arm}_ASSISTANT_ID)")
+        return {"error": f"no assistant configured for arm {arm}"}, 200
+
+    logger.info(f"assistant-request {call_id}: -> arm {arm} ({assistant_id})"
+                + (" [forced]" if force in ("A", "B") else ""))
+    return {"assistantId": assistant_id}, 200
 
 
 # ── Webhook Handler ────────────────────────────────────────────────────────
