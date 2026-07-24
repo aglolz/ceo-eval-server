@@ -9,6 +9,8 @@ Deploy to Railway:
 
 import os
 import logging
+import threading
+import requests
 from flask import Flask, request, jsonify
 from server_lib import handle_call_webhook, handle_assistant_request
 
@@ -31,6 +33,23 @@ JUDGES = [
 
 TABLE = os.environ.get("SUPABASE_TABLE", "ankita_test_calls")
 
+# SMS bridge. Arm A's live assistant posts its end-of-call report straight to a
+# Zapier hook that relays to the Google Apps Script -> Twilio SMS. Test-line arms
+# post here to Railway instead, so we mirror the same report to that hook so
+# evaluated calls still text. Fire-and-forget: a hook hiccup must never break
+# scoring. Unset => no-op (safe default until configured on Railway).
+ZAPIER_SMS_HOOK_URL = os.environ.get("ZAPIER_SMS_HOOK_URL", "").strip()
+
+
+def _forward_to_sms(payload):
+    """Mirror a Vapi end-of-call report to the SMS relay hook (best-effort)."""
+    if not ZAPIER_SMS_HOOK_URL:
+        return
+    try:
+        requests.post(ZAPIER_SMS_HOOK_URL, json=payload, timeout=8)
+    except Exception as e:
+        logger.warning(f"SMS forward failed: {e}")
+
 
 @app.route("/webhook", methods=["POST"])
 def handle_webhook():
@@ -41,6 +60,10 @@ def handle_webhook():
     if msg_type == "assistant-request":
         response, status = handle_assistant_request(payload)
     else:
+        # Mirror end-of-call to the SMS pipeline BEFORE scoring, so texting isn't
+        # delayed by judge latency (matches live Arm A's timing).
+        if msg_type == "end-of-call-report":
+            threading.Thread(target=_forward_to_sms, args=(payload,), daemon=True).start()
         response, status = handle_call_webhook(payload, JUDGES, TABLE)
     return jsonify(response), status
 
