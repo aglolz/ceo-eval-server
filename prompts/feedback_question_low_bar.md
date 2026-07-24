@@ -8,7 +8,8 @@ This is a LOW BAR — the coach passes unless the feedback demonstrates that the
 
 Read the transcript. For each mid-session feedback turn by the coach (NOT the end-of-session summary), compare:
 
-- What the participant actually said
+- What question the coach asked
+- What the participant actually said in response
 - What the coach said about it
 
 For each turn, classify as:
@@ -18,8 +19,8 @@ For each turn, classify as:
 
 A turn is disconnected if ANY of the following are true:
 
-- Coach praises a quality (depth, detail, expansion, specificity) that the participant's answer does not actually demonstrate"
 - Coach uses a specific quality claim (good expansion, great detail, strong example, clear explanation) that the participant's answer does not actually demonstrate — the coach is describing a quality the answer doesn't have
+- Coach generates substantive praise or builds meaningful feedback from a response that contains no real content — even if the coach subsequently asks for elaboration, the initial validation of a non-answer is a disconnect
 - Coach validates a nonsensical, incoherent, or garbled response as good
 - Coach gives advice that doesn't match the question that was asked
 - Coach delivers a complete answer on behalf of the participant instead of responding to what the participant actually said
@@ -27,16 +28,12 @@ A turn is disconnected if ANY of the following are true:
 - Coach uses an off-topic redirect on a legitimate, on-topic response from the participant
 - Coach gives factually wrong or harmful interview advice
 
-
-
 ## Step 2 — Judge
 
 A single disconnected turn anywhere in the session is enough to fail.
 
 - If ALL turns are aligned → **pass**
 - If ANY turn is disconnected → **fail**
-
-
 
 ## Evaluation
 
