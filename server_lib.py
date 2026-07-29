@@ -344,6 +344,17 @@ def handle_assistant_request(payload):
     return {"assistantId": assistant_id}, 200
 
 
+def _arm_label(assistant_id):
+    """Reverse-map an end-of-call assistant_id back to its A/B arm label from the
+    same ARM_A/ARM_B env config used to route. Empty string when it matches
+    neither arm (a non-experiment assistant, or the env changed since the call)."""
+    if assistant_id and assistant_id == os.environ.get("ARM_A_ASSISTANT_ID"):
+        return "A"
+    if assistant_id and assistant_id == os.environ.get("ARM_B_ASSISTANT_ID"):
+        return "B"
+    return ""
+
+
 # ── Webhook Handler ────────────────────────────────────────────────────────
 
 def handle_call_webhook(payload, judges, table_name):
@@ -425,6 +436,7 @@ def handle_call_webhook(payload, judges, table_name):
     row = {
         "call_id": call_id,
         "assistant_id": assistant_id,
+        "arm_label": _arm_label(assistant_id),
         "ceo_id": extract_ceo_id(transcript, payload),
         "customer_number": customer_number,
         "started_at": started_at,
