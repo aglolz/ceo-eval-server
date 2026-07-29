@@ -10,9 +10,12 @@ Deploy to Railway:
 import os
 import logging
 import threading
+from xml.sax.saxutils import escape
+
 import requests
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, Response
 from server_lib import handle_call_webhook, handle_assistant_request
+import sms_feedback
 
 app = Flask(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -65,7 +68,35 @@ def handle_webhook():
         if msg_type == "end-of-call-report":
             threading.Thread(target=_forward_to_sms, args=(payload,), daemon=True).start()
         response, status = handle_call_webhook(payload, JUDGES, TABLE)
+        # After scoring, kick off the post-call feedback survey. Best-effort and
+        # gated by FEEDBACK_SMS_ENABLED (default off) — never raises into the
+        # webhook. Q1 lands after the summary text mirrored above.
+        if msg_type == "end-of-call-report":
+            call = payload.get("message", {}).get("call", {})
+            sms_feedback.start_survey(
+                call.get("id"),
+                call.get("customer", {}).get("number", ""),
+                call.get("assistantId", ""),
+                call.get("startedAt", ""),
+            )
     return jsonify(response), status
+
+
+@app.route("/sms", methods=["POST"])
+def handle_sms():
+    """Twilio inbound webhook for the feedback survey. Twilio POSTs form-encoded
+    From/Body; we reply with TwiML. handle_inbound is self-contained and never
+    raises into the response path."""
+    from_number = request.form.get("From", "")
+    body = request.form.get("Body", "")
+    reply = None
+    try:
+        reply = sms_feedback.handle_inbound(from_number, body)
+    except Exception as e:
+        logger.warning(f"/sms handling failed for {from_number}: {e}")
+    inner = f"<Message>{escape(reply)}</Message>" if reply else ""
+    twiml = f'<?xml version="1.0" encoding="UTF-8"?><Response>{inner}</Response>'
+    return Response(twiml, mimetype="text/xml")
 
 
 @app.route("/", methods=["GET"])
