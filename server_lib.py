@@ -232,6 +232,84 @@ def run_yaml_judge(transcript, prompt_path, retries=2):
     return {"verdict": "error", "reasoning": f"unparseable after {retries + 1} attempts: {last_err}", "scan": None}
 
 
+# ── CEO ID extraction ──────────────────────────────────────────────────────
+#
+# The participant ID the caller verified with. Test calls use 2222; real
+# participants use their own ID — downstream consumers split test vs real on
+# this instead of grepping transcripts. Three sources, most reliable first:
+#   1. the telephony keypad line Vapi injects ("User's Keypad Entry: 2222")
+#   2. the validate_ceo_id tool call in the artifact messages (args + result)
+#   3. digits/digit-words spoken in a User turn that mentions the CEO ID
+# Returns None when no ID is observable (e.g. the call died pre-verification).
+
+_KEYPAD_ID_RE = re.compile(r"Keypad Entry:\s*#?(\d{2,10})")
+_SPOKEN_DIGITS = {"zero": "0", "oh": "0", "one": "1", "two": "2", "three": "3",
+                  "four": "4", "five": "5", "six": "6", "seven": "7",
+                  "eight": "8", "nine": "9"}
+
+
+def _ceo_id_from_tool_calls(payload):
+    """Pull ceo_id from validate_ceo_id messages in the webhook artifact.
+    Prefers the tool_call_result (backend-verified) over the model's own
+    arguments (which carry whatever the STT heard)."""
+    msg = payload.get("message", {})
+    from_args = None
+    for artifact in (msg.get("artifact", {}), msg.get("call", {}).get("artifact", {})):
+        for m in artifact.get("messages", []) or []:
+            if m.get("role") == "tool_call_result" and m.get("name") == "validate_ceo_id":
+                blob = m.get("metadata", {}).get("responseBody") or m.get("result", "")
+                if not isinstance(blob, dict):
+                    try:
+                        blob = json.loads(blob)
+                    except (ValueError, TypeError):
+                        continue
+                cid = str(blob.get("ceo_id", "")).strip()
+                if cid.isdigit():
+                    return cid
+            for tc in m.get("toolCalls", []) or []:
+                fn = tc.get("function", {})
+                if fn.get("name") != "validate_ceo_id":
+                    continue
+                args = fn.get("arguments", {})
+                if not isinstance(args, dict):
+                    try:
+                        args = json.loads(args)
+                    except (ValueError, TypeError):
+                        continue
+                cid = str(args.get("ceo_id", "")).strip()
+                if cid.isdigit():
+                    from_args = from_args or cid
+    return from_args
+
+
+def _ceo_id_from_spoken(transcript):
+    """Digits spoken in a User turn mentioning the CEO ID, e.g.
+    'My CEO ID is two two two two.' or 'It's 2222.'"""
+    for line in transcript.splitlines():
+        if not line.startswith("User:") or "ceo id" not in line.lower():
+            continue
+        tail = re.split(r"CEO\s*ID", line, flags=re.I)[-1]
+        run = ""
+        for tok in re.findall(r"\d+|[a-z]+", tail.lower()):
+            if tok.isdigit():
+                run += tok
+            elif tok in _SPOKEN_DIGITS:
+                run += _SPOKEN_DIGITS[tok]
+            elif run:
+                break  # digit run ended (ignore leading filler like "is")
+        if 2 <= len(run) <= 10:
+            return run
+    return None
+
+
+def extract_ceo_id(transcript, payload):
+    """Best-effort CEO ID for a call, or None."""
+    m = _KEYPAD_ID_RE.search(transcript or "")
+    if m:
+        return m.group(1)
+    return _ceo_id_from_tool_calls(payload) or _ceo_id_from_spoken(transcript or "")
+
+
 # ── A/B Routing (assistant-request) ────────────────────────────────────────
 #
 # For the 50/50 experiment an inbound phone number points at this server with
@@ -347,6 +425,7 @@ def handle_call_webhook(payload, judges, table_name):
     row = {
         "call_id": call_id,
         "assistant_id": assistant_id,
+        "ceo_id": extract_ceo_id(transcript, payload),
         "customer_number": customer_number,
         "started_at": started_at,
         "ended_at": ended_at,
