@@ -355,6 +355,25 @@ def _arm_label(assistant_id):
     return ""
 
 
+# Simulation traffic split. Calls answered by a designated simulation assistant
+# (e.g. the sim phone line's copy-of-arm-B) are scored by the same judges but
+# stored in their own Supabase table, so synthetic runs never mix with live or
+# test A/B data. The dedicated sim number points straight at its assistant, so
+# sim calls only ever hit the end-of-call path — never assistant-request.
+#
+# Env: SIM_ASSISTANT_IDS — comma-separated assistantIds to divert.
+#      SIM_TABLE — destination table for diverted calls (default "sim_calls").
+
+def resolve_table(payload, default_table):
+    """Return (table_name, is_sim) for an end-of-call payload: the sim table when
+    the call's assistantId is listed in SIM_ASSISTANT_IDS, else default_table."""
+    sim_ids = {s.strip() for s in os.environ.get("SIM_ASSISTANT_IDS", "").split(",") if s.strip()}
+    assistant_id = payload.get("message", {}).get("call", {}).get("assistantId", "")
+    if assistant_id and assistant_id in sim_ids:
+        return os.environ.get("SIM_TABLE", "sim_calls"), True
+    return default_table, False
+
+
 # ── Webhook Handler ────────────────────────────────────────────────────────
 
 def handle_call_webhook(payload, judges, table_name):

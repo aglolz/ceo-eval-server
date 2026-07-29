@@ -16,6 +16,10 @@ Set these in Railway's dashboard:
 - `SUPABASE_URL` — your Supabase project URL
 - `SUPABASE_KEY` — your Supabase anon key
 - `ANTHROPIC_MODEL` — defaults to `claude-sonnet-4-6`
+- `SIM_ASSISTANT_IDS` — comma-separated assistantIds whose calls are simulation
+  traffic: scored by the same judges but written to the `sim_calls` table
+  (override with `SIM_TABLE`) and excluded from the participant SMS pipeline.
+  Create the table with `migrations/009_add_sim_calls.sql` before deploying.
 
 ## Adding New Judges
 

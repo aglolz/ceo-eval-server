@@ -14,7 +14,7 @@ from xml.sax.saxutils import escape
 
 import requests
 from flask import Flask, request, jsonify, Response
-from server_lib import handle_call_webhook, handle_assistant_request
+from server_lib import handle_call_webhook, handle_assistant_request, resolve_table
 import sms_feedback
 
 app = Flask(__name__)
@@ -67,9 +67,12 @@ def handle_webhook():
     if msg_type == "assistant-request":
         response, status = handle_assistant_request(payload)
     else:
+        # Simulation calls score with the same judges but land in their own
+        # table, and never enter the participant SMS pipeline (summary/survey).
+        table, is_sim = resolve_table(payload, TABLE)
         # Mirror end-of-call to the SMS pipeline BEFORE scoring, so texting isn't
         # delayed by judge latency (matches live Arm A's timing).
-        if msg_type == "end-of-call-report":
+        if msg_type == "end-of-call-report" and not is_sim:
             threading.Thread(target=_forward_to_sms, args=(payload,), daemon=True).start()
             # Post-call feedback survey. Q1 is delayed SURVEY_DELAY_SEC so the
             # summary SMS (mirrored above, then crawling through Zapier) lands
@@ -89,7 +92,7 @@ def handle_webhook():
             )
             q1.daemon = True
             q1.start()
-        response, status = handle_call_webhook(payload, JUDGES, TABLE)
+        response, status = handle_call_webhook(payload, JUDGES, table)
     return jsonify(response), status
 
 
@@ -118,6 +121,8 @@ def health():
         "instance": "ankita_test",
         "judges": [j["name"] for j in JUDGES],
         "table": TABLE,
+        "sim_table": os.environ.get("SIM_TABLE", "sim_calls"),
+        "sim_assistant_ids": [s.strip() for s in os.environ.get("SIM_ASSISTANT_IDS", "").split(",") if s.strip()],
     }), 200
 
 

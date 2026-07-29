@@ -10,7 +10,7 @@ Deploy to Railway:
 import os
 import logging
 from flask import Flask, request, jsonify
-from server_lib import handle_call_webhook
+from server_lib import handle_call_webhook, resolve_table
 
 app = Flask(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -36,7 +36,9 @@ TABLE = os.environ.get("SUPABASE_TABLE", "maya_test_calls")
 def handle_webhook():
     """Receive end-of-call-report from Vapi, score, write to Supabase."""
     payload = request.get_json(force=True)
-    response, status = handle_call_webhook(payload, JUDGES, TABLE)
+    # Simulation assistants' calls land in their own table (see resolve_table).
+    table, _is_sim = resolve_table(payload, TABLE)
+    response, status = handle_call_webhook(payload, JUDGES, table)
     return jsonify(response), status
 
 
