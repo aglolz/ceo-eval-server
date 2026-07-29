@@ -25,3 +25,16 @@ create table if not exists feedback_sms (
 create index if not exists feedback_sms_phone_active_idx
     on feedback_sms (phone_number, created_at desc)
     where state in ('awaiting_q1', 'awaiting_q2');
+
+-- The server connects with the anon role (SUPABASE_KEY). New tables don't
+-- inherit privileges, so without this every start_survey/handle_inbound call
+-- gets 42501 permission-denied. start_survey needs select+insert, handle_inbound
+-- needs select+update. Matches the grants the existing judge tables already have.
+grant select, insert, update on table public.feedback_sms
+    to anon, authenticated, service_role;
+
+-- RLS is on by default and blocks the anon INSERT (42501 "new row violates
+-- row-level security policy") even with the grant above. The judge tables
+-- (ankita_test_calls) run with RLS off, so match them. If you later want this
+-- locked down, keep RLS on + add policies, or point the server at service_role.
+alter table public.feedback_sms disable row level security;

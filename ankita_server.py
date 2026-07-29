@@ -43,6 +43,10 @@ TABLE = os.environ.get("SUPABASE_TABLE", "ankita_test_calls")
 # scoring. Unset => no-op (safe default until configured on Railway).
 ZAPIER_SMS_HOOK_URL = os.environ.get("ZAPIER_SMS_HOOK_URL", "").strip()
 
+# Delay before sending survey Q1, so the summary SMS — which crawls through the
+# Zapier chain (filter → python → sheets → Twilio) — reliably lands first.
+SURVEY_DELAY_SEC = int(os.environ.get("SURVEY_DELAY_SEC", "75"))
+
 
 def _forward_to_sms(payload):
     """Mirror a Vapi end-of-call report to the SMS relay hook (best-effort)."""
@@ -67,18 +71,25 @@ def handle_webhook():
         # delayed by judge latency (matches live Arm A's timing).
         if msg_type == "end-of-call-report":
             threading.Thread(target=_forward_to_sms, args=(payload,), daemon=True).start()
-        response, status = handle_call_webhook(payload, JUDGES, TABLE)
-        # After scoring, kick off the post-call feedback survey. Best-effort and
-        # gated by FEEDBACK_SMS_ENABLED (default off) — never raises into the
-        # webhook. Q1 lands after the summary text mirrored above.
-        if msg_type == "end-of-call-report":
+            # Post-call feedback survey. Q1 is delayed SURVEY_DELAY_SEC so the
+            # summary SMS (mirrored above, then crawling through Zapier) lands
+            # first. Fired off the payload directly — independent of scoring
+            # latency below. Best-effort, gated by FEEDBACK_SMS_ENABLED; never
+            # raises into the webhook.
             call = payload.get("message", {}).get("call", {})
-            sms_feedback.start_survey(
-                call.get("id"),
-                call.get("customer", {}).get("number", ""),
-                call.get("assistantId", ""),
-                call.get("startedAt", ""),
+            q1 = threading.Timer(
+                SURVEY_DELAY_SEC,
+                sms_feedback.start_survey,
+                args=(
+                    call.get("id"),
+                    call.get("customer", {}).get("number", ""),
+                    call.get("assistantId", ""),
+                    call.get("startedAt", ""),
+                ),
             )
+            q1.daemon = True
+            q1.start()
+        response, status = handle_call_webhook(payload, JUDGES, TABLE)
     return jsonify(response), status
 
 
