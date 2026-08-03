@@ -10,6 +10,7 @@ Deploy to Railway:
 import os
 import logging
 import threading
+import time
 from xml.sax.saxutils import escape
 
 import requests
@@ -49,13 +50,26 @@ SURVEY_DELAY_SEC = int(os.environ.get("SURVEY_DELAY_SEC", "75"))
 
 
 def _forward_to_sms(payload):
-    """Mirror a Vapi end-of-call report to the SMS relay hook (best-effort)."""
+    """Mirror a Vapi end-of-call report to the SMS/Sheets relay hook.
+    Retries a couple of times — a single dropped attempt used to mean the
+    call landed in Supabase but silently never reached Sheets, with no log
+    line to show it. Success is now logged too, since the old code only
+    logged failures — a quiet Railway log didn't mean delivery happened."""
+    call_id = payload.get("message", {}).get("call", {}).get("id", "unknown")
     if not ZAPIER_SMS_HOOK_URL:
+        logger.warning(f"Call {call_id}: ZAPIER_SMS_HOOK_URL not set — skipping Sheets/SMS forward")
         return
-    try:
-        requests.post(ZAPIER_SMS_HOOK_URL, json=payload, timeout=8)
-    except Exception as e:
-        logger.warning(f"SMS forward failed: {e}")
+    last_err = None
+    for attempt in range(3):
+        try:
+            requests.post(ZAPIER_SMS_HOOK_URL, json=payload, timeout=8)
+            logger.info(f"Call {call_id}: forwarded to Sheets/SMS hook")
+            return
+        except Exception as e:
+            last_err = e
+            if attempt < 2:
+                time.sleep(2)
+    logger.warning(f"Call {call_id}: SMS/Sheets forward failed after 3 attempts: {last_err}")
 
 
 @app.route("/webhook", methods=["POST"])

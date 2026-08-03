@@ -415,10 +415,6 @@ def handle_call_webhook(payload, judges, table_name):
             if not ended_at:
                 ended_at = api_result.get("endedAt", "")
 
-    if not transcript:
-        logger.warning(f"Call {call_id}: no transcript found after retries")
-        return {"status": "error", "reason": "no transcript"}, 200
-
     # Compute duration
     duration_sec = None
     try:
@@ -428,7 +424,15 @@ def handle_call_webhook(payload, judges, table_name):
     except Exception:
         pass
 
-    logger.info(f"Call {call_id}: scoring {len(transcript)} chars across {len(judges)} judges on table '{table_name}'")
+    # No transcript after retries: still record the call in Supabase (unscored)
+    # instead of dropping it silently — a missing transcript must not mean a
+    # missing row. The Sheets/SMS forward already fired independently of this,
+    # so this call must not go Sheets-only just because scoring couldn't run.
+    judges_to_run = judges if transcript else []
+    if not transcript:
+        logger.warning(f"Call {call_id}: no transcript found after retries — saving unscored row")
+    else:
+        logger.info(f"Call {call_id}: scoring {len(transcript)} chars across {len(judges_to_run)} judges on table '{table_name}'")
 
     # Run judges in parallel
     def run_single_judge(judge_dict):
@@ -445,8 +449,8 @@ def handle_call_webhook(payload, judges, table_name):
         return (j["name"], result)
 
     scores = {}
-    with ThreadPoolExecutor(max_workers=len(judges)) as executor:
-        futures = {executor.submit(run_single_judge, j): j["name"] for j in judges}
+    with ThreadPoolExecutor(max_workers=len(judges_to_run) or 1) as executor:
+        futures = {executor.submit(run_single_judge, j): j["name"] for j in judges_to_run}
         for future in as_completed(futures):
             judge_name, result = future.result()
             scores[judge_name] = result
@@ -462,7 +466,7 @@ def handle_call_webhook(payload, judges, table_name):
         "ended_at": ended_at,
         "duration_sec": duration_sec,
         "transcript": transcript,
-        "scored_at": datetime.utcnow().isoformat(),
+        "scored_at": datetime.utcnow().isoformat() if transcript else None,
     }
 
     # Flatten judge results into columns (only if judges were run)
@@ -475,20 +479,36 @@ def handle_call_webhook(payload, judges, table_name):
                 row[f"{name}_scan"] = json.dumps(scores[name]["scan"])
 
     # Convert empty strings to None for date fields
-    for key in ['started_at', 'ended_at', 'scored_at']:
+    for key in ['started_at', 'ended_at', 'scored_at', 'transcript']:
         if row.get(key) == '':
             row[key] = None
 
-    try:
-        supabase = create_client(
-            os.environ["SUPABASE_URL"],
-            os.environ["SUPABASE_KEY"]
-        )
-        supabase.table(table_name).insert(row).execute()
-        logger.info(f"Call {call_id}: saved to Supabase table '{table_name}'")
-    except Exception as e:
-        logger.error(f"Call {call_id}: Supabase error: {e}")
-        return {"status": "error", "reason": str(e)}, 500
+    # Retry the Supabase write — a transient network/API hiccup here used to
+    # mean the call was scored (Claude API cost already spent) but never
+    # landed in Supabase at all, with no way to tell from the Sheets side.
+    supabase_error = None
+    for attempt in range(3):
+        try:
+            supabase = create_client(
+                os.environ["SUPABASE_URL"],
+                os.environ["SUPABASE_KEY"]
+            )
+            supabase.table(table_name).insert(row).execute()
+            logger.info(f"Call {call_id}: saved to Supabase table '{table_name}'")
+            supabase_error = None
+            break
+        except Exception as e:
+            supabase_error = e
+            logger.warning(f"Call {call_id}: Supabase insert attempt {attempt + 1}/3 failed: {e}")
+            if attempt < 2:
+                time.sleep(2)
+
+    if supabase_error is not None:
+        logger.error(f"Call {call_id}: Supabase error after 3 attempts: {supabase_error}")
+        return {"status": "error", "reason": str(supabase_error)}, 500
+
+    if not transcript:
+        return {"status": "saved_unscored", "call_id": call_id, "reason": "no transcript"}, 200
 
     return {"status": "scored", "call_id": call_id, "scores": {
         name: scores[name]["verdict"] for name in scores
