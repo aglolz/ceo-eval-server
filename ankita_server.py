@@ -17,8 +17,10 @@ import requests
 from flask import Flask, request, jsonify, Response
 from server_lib import handle_call_webhook, handle_assistant_request, resolve_table
 import sms_feedback
+from dashboard import dash_bp
 
 app = Flask(__name__)
+app.register_blueprint(dash_bp)  # /dashboard — live A/B boards (DASHBOARD_TOKEN-gated)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 

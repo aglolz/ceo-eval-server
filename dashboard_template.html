@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Voice Coach — evaluation dashboard (prototype)</title>
+<style>
+  :root{
+    --bg:#f7f6f3; --surface:#ffffff; --ink:#23211c; --muted:#6b6862; --faint:#9b988f;
+    --line:#e7e4dd; --accent:#2f6bd6; --accent-bg:#eaf1fc;
+    --pass:#3b8a52; --pass-bg:#e9f3ec; --mix:#c2871c; --fail:#cf463d; --fail-bg:#fbeae8;
+    --radius:12px;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+  .wrap{max-width:1040px;margin:0 auto;padding:28px 24px 80px}
+  h1{font-size:22px;font-weight:600;margin:0}
+  h2{font-size:16px;font-weight:600;margin:0 0 14px}
+  .sub{color:var(--muted);font-size:13px;margin:4px 0 0}
+  .proto{display:inline-block;font-size:11px;font-weight:600;color:#7a5c00;background:#fbf2dd;border-radius:6px;padding:2px 8px;margin-left:8px;vertical-align:2px}
+  header{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:22px}
+  .vctl{display:flex;align-items:center;gap:10px;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 14px}
+  .vctl label{font-size:13px;color:var(--muted)}
+  select{font:14px inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:7px 10px;cursor:pointer}
+  select:hover{border-color:#cfccc3}
+  #variant{width:218px} #compareTo{width:184px}
+  .panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:20px 22px;margin-bottom:18px}
+  .opt{display:inline-flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;color:var(--ink)}
+  .opt input{cursor:pointer;margin:0}
+  .fhead{display:flex;align-items:center;gap:12px}
+  .fbody{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+  #filterpanel{padding:14px 18px}
+  #filterpanel.closed .fbody{display:none}
+  .fcount{display:inline-block;min-width:18px;text-align:center;font-size:11px;font-weight:600;color:#fff;background:var(--accent);border-radius:10px;padding:1px 5px;margin-left:6px}
+  .dd{position:relative}
+  .ddbtn{font:13px inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:20px;padding:7px 12px;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+  .ddbtn:hover{border-color:#cfccc3}
+  .ddbtn.on{border-color:var(--accent);background:var(--accent-bg)}
+  .ddbtn .n{font-weight:600;color:var(--accent)}
+  .ddmenu{position:absolute;top:calc(100% + 6px);left:0;z-index:40;background:var(--surface);border:1px solid var(--line);border-radius:10px;box-shadow:0 10px 28px rgba(0,0,0,.10);padding:10px 12px;min-width:190px;max-height:280px;overflow:auto;display:flex;flex-direction:column;gap:7px}
+  .btn{font:13px inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:8px 12px;cursor:pointer}
+  .btn:hover{background:#f1efe9}
+  .meta{margin-left:auto;text-align:right;font-size:13px;color:var(--muted)}
+  .meta b{color:var(--ink);font-weight:600}
+  .cards{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+  .card .lab{font-size:12px;color:var(--muted)}
+  .card .val{font-size:26px;font-weight:600;margin-top:2px}
+  .legend{display:flex;gap:16px;font-size:12px;color:var(--muted);margin-bottom:14px}
+  .legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+  .row{display:grid;grid-template-columns:230px 1fr 92px;align-items:center;gap:12px;padding:5px 6px;border-radius:8px;cursor:pointer}
+  .row:hover{background:#f3f1ec}
+  .row.sel{background:var(--accent-bg)}
+  .rlab{font-size:13.5px;line-height:1.25}
+  .rlab small{display:block;font-size:10px;color:var(--faint);text-transform:uppercase;letter-spacing:.04em}
+  .track{height:18px;background:#efece5;border-radius:7px;overflow:hidden}
+  .fill{height:100%;border-radius:7px}
+  .row.cmp5{grid-template-columns:230px 1fr 58px 1fr 78px;cursor:pointer}
+  .armtabs{display:inline-flex;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:2px;gap:2px;vertical-align:middle}
+  .armtabs button{font:12px inherit;border:none;background:none;color:var(--muted);border-radius:6px;padding:4px 10px;cursor:pointer}
+  .armtabs button.on{background:var(--surface);color:var(--ink);font-weight:600;box-shadow:0 1px 2px rgba(0,0,0,.08)}
+  .dwrap{display:flex}
+  .dwrap .ddbar{flex:1}
+  .abhdr{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);padding-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .delta{font-weight:600}
+  .rpct{text-align:right;font-size:13px}
+  .rpct b{font-weight:600}
+  .rpct small{color:var(--faint)}
+  .warn{display:flex;gap:10px;align-items:flex-start;background:#fbf2dd;border:1px solid #efdca8;border-radius:10px;padding:12px 14px;font-size:13.5px;color:#735609}
+  .callout{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:16px}
+  .co{border:1px solid var(--line);border-radius:10px;padding:13px 15px}
+  .tag{display:inline-block;font-size:11px;font-weight:600;border-radius:6px;padding:2px 8px}
+  .tag.g{color:#1f5e33;background:var(--pass-bg)} .tag.r{color:#8c2c25;background:var(--fail-bg)}
+  .quote{font-size:13px;color:var(--muted);line-height:1.5;margin:8px 0 0}
+  .whycard{border:1px solid var(--line);border-radius:10px;padding:13px 15px;margin-bottom:10px}
+  .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px}
+  .chip{font-size:11px;color:var(--muted);background:#f1efe9;border-radius:20px;padding:2px 9px}
+  .hidden{display:none}
+  .ddrow{display:grid;grid-template-columns:230px 1fr 1fr 56px;align-items:center;gap:0;padding:4px 0}
+  .ddbar{height:17px;display:flex}
+  .axis{border-right:2px solid #d9d6ce}
+  .diff{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;line-height:1.55;border-radius:9px;overflow:hidden;margin-top:6px}
+  .diff div{padding:6px 11px}
+  .del{background:var(--fail-bg);color:#8c2c25} .add{background:var(--pass-bg);color:#1f5e33}
+  .mini{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:14px 0}
+  .pagetabs{display:inline-flex;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:3px;gap:2px;margin-bottom:18px}
+  .pagetabs button{font:13.5px inherit;border:none;background:none;color:var(--muted);border-radius:8px;padding:7px 16px;cursor:pointer}
+  .pagetabs button.on{background:var(--accent-bg);color:var(--accent);font-weight:600}
+  .upair{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+  .colchart{display:flex;align-items:flex-end;gap:3px;height:150px;margin-top:14px}
+  .colwrap{flex:1;display:flex;flex-direction:column;align-items:center;gap:0;height:100%;justify-content:flex-end;min-width:0}
+  .colbar{width:100%;max-width:34px;background:var(--accent);border-radius:4px 4px 0 0;min-height:2px}
+  .collab{font-size:10px;color:var(--faint);margin-top:4px;white-space:nowrap;overflow:visible}
+  .colval{font-size:10px;color:var(--muted);margin-bottom:2px}
+  .hrow{display:grid;grid-template-columns:110px 1fr 54px;align-items:center;gap:12px;padding:4px 0}
+  .hrow .rlab{font-size:13px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>AI Voice Coach — evaluation dashboard <span class="proto">prototype</span></h1>
+      <p class="sub" id="srcnote"></p>
+    </div>
+    <div class="vctl">
+      <label>Coach</label><select id="variant"></select>
+      <label>vs</label><select id="compareTo"></select>
+    </div>
+  </header>
+
+  <div class="pagetabs hidden" id="pagetabs">
+    <button data-page="quality" class="on">Quality</button>
+    <button data-page="usage">Usage</button>
+    <button data-page="prompt">Prompt change</button>
+  </div>
+
+  <section class="panel" id="filterpanel">
+    <div class="fhead">
+      <button class="btn" id="ftoggle" style="border-radius:20px"></button>
+      <div class="meta" id="metaN"></div>
+    </div>
+    <div class="fbody" id="filters"></div>
+  </section>
+  <div class="warn hidden" id="nodemo" style="margin-bottom:18px"><span>ℹ</span><span>No filterable attributes for this variant.</span></div>
+
+  <div id="qualitypage">
+  <section class="panel">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:14px">
+      <h2 id="swtitle" style="margin:0">Coach strengths &amp; weaknesses</h2>
+      <div class="meta" id="callsinview" style="white-space:nowrap"></div>
+    </div>
+    <div class="legend">
+      <span><i style="background:var(--pass)"></i>Strength ≥80% pass</span>
+      <span><i style="background:var(--mix)"></i>Mixed 50–79%</span>
+      <span><i style="background:var(--fail)"></i>Weakness &lt;50%</span>
+      <span style="color:var(--faint)" title="A dimension is N/A on a call when the judge had no chance to observe it — those calls don't count toward the pass rate.">(n) = calls scored on that dimension; N/A excluded</span>
+      <span style="margin-left:auto;color:var(--faint)">click a dimension to see why it fails ↓</span>
+    </div>
+    <div id="suppress" class="warn hidden"></div>
+    <div id="dimbars"></div>
+    <div class="callout" id="callout"></div>
+  </section>
+
+  <section class="panel hidden" id="whypanel">
+    <h2 id="whytitle"></h2>
+    <div id="whylist"></div>
+  </section>
+
+  </div>
+
+  <div id="promptpage" class="hidden">
+    <section class="panel" style="background:var(--accent-bg);border-color:#d3e0f6">
+      <h2 style="margin-bottom:10px">Key takeaways</h2>
+      <ul id="ptakeaways" style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:7px;font-size:13.5px;line-height:1.5"></ul>
+    </section>
+    <section class="panel">
+      <h2 id="pdifftitle">Full prompt diff</h2>
+      <p class="sub" id="pdiffnote" style="margin:2px 0 12px"></p>
+      <div id="pdiff"></div>
+    </section>
+  </div>
+
+  <div id="usagepage" class="hidden">
+    <div class="cards" id="ucards"></div>
+    <section class="panel">
+      <h2>Calls per day</h2>
+      <p class="sub" style="margin:-8px 0 0">All arms combined · demographic filters apply</p>
+      <div class="colchart" id="udaily"></div>
+    </section>
+    <div class="upair">
+      <section class="panel"><h2>Call duration</h2><div id="udur" style="margin-top:10px"></div></section>
+      <section class="panel"><h2>Repeat use — calls per caller</h2><div id="urepeat" style="margin-top:10px"></div></section>
+    </div>
+    <div id="usuppress" class="warn hidden" style="margin-bottom:18px"></div>
+  </div>
+</div>
+
+<script>
+const DATA = /*__DATA__*/{};
+const FACET_LABELS = {modality:"Modality",site:"Site",population:"Referral population",age:"Age",gender:"Gender",race:"Race / ethnicity",education:"Education",duration:"Call duration",date:"Call week"};
+const MIN_CELL = 8;
+const state = {variant:DATA.variants[0].id, compareTo:null, filters:{}, selectedDim:null, whyArm:null, filtersOpen:true, openFacet:null, page:"quality"};
+const vById = Object.fromEntries(DATA.variants.map(v=>[v.id,v]));
+
+function fillColor(p){return p>=80?"var(--pass)":p>=50?"var(--mix)":"var(--fail)";}
+function recordsFor(vid){return DATA.records.filter(r=>r.variant===vid);}
+function hasDemo(vid){return vById[vid].hasDemo;}
+
+function filtered(vid){
+  let recs=recordsFor(vid||state.variant);
+  recs=recs.filter(r=>Object.entries(state.filters).every(([k,vals])=>!vals||!vals.length||vals.includes(r.demo[k])));
+  return recs;
+}
+function filteredAll(){
+  // Usage page works across ALL arms; demographic filters still apply.
+  return DATA.records.filter(r=>Object.entries(state.filters).every(([k,vals])=>!vals||!vals.length||vals.includes(r.demo[k])));
+}
+
+function renderUsage(){
+  const recs=filteredAll();
+  const meta=document.getElementById("metaN");
+  if(meta) meta.innerHTML=`<b>${recs.length}</b> of ${DATA.records.length} calls · all arms`;
+  const sup=document.getElementById("usuppress");
+  const anyFilter=Object.values(state.filters).some(a=>a&&a.length);
+  const small=anyFilter&&recs.length<MIN_CELL;
+  sup.classList.toggle("hidden",!small);
+  if(small){
+    sup.innerHTML=`<span>⚠</span><span>Only ${recs.length} call(s) match the filters (under ${MIN_CELL}) — usage charts hidden; broaden the filter.</span>`;
+    ["ucards","udaily","udur","urepeat"].forEach(id=>document.getElementById(id).innerHTML="");
+    return;
+  }
+
+  // per-caller stats (uptake)
+  const callers={};
+  recs.forEach(r=>{const c=(r.ceo||"").trim(); if(c) callers[c]=(callers[c]||0)+1;});
+  const counts=Object.values(callers);
+  const nCallers=counts.length;
+  const repeat=counts.filter(n=>n>=2).length;
+  const durs=recs.map(r=>r.dur).filter(d=>typeof d==="number").sort((a,b)=>a-b);
+  const med=durs.length?(durs.length%2?durs[(durs.length-1)/2]:(durs[durs.length/2-1]+durs[durs.length/2])/2):null;
+  document.getElementById("ucards").innerHTML=[
+    ["Calls",recs.length],
+    ["Unique callers",nCallers||"—"],
+    ["Came back (2+ calls)",nCallers?Math.round(100*repeat/nCallers)+"%":"—"],
+    ["Median duration",med!=null?med.toFixed(1)+" min":"—"],
+  ].map(([l,v])=>`<div class="card"><div class="lab">${l}</div><div class="val">${v}</div></div>`).join("");
+
+  // calls per day (continuous range, gaps = 0)
+  const days={};
+  recs.forEach(r=>{if(r.day)days[r.day]=(days[r.day]||0)+1;});
+  const dayKeys=Object.keys(days).sort();
+  let html="";
+  if(dayKeys.length){
+    const daysArr=[];
+    for(let d=new Date(dayKeys[0]+"T00:00:00Z"); daysArr.length<400; d.setUTCDate(d.getUTCDate()+1)){
+      const iso=d.toISOString().slice(0,10);
+      daysArr.push([iso,days[iso]||0]);
+      if(iso===dayKeys[dayKeys.length-1]) break;
+    }
+    const max=Math.max(...daysArr.map(x=>x[1]),1);
+    const step=Math.ceil(daysArr.length/12);
+    html=daysArr.map(([iso,n],i)=>`
+      <div class="colwrap" title="${iso} · ${n} call${n!==1?"s":""}">
+        ${n?`<div class="colval">${n}</div>`:""}
+        <div class="colbar" style="height:${Math.round(104*n/max)+2}px"></div>
+        <div class="collab">${i%step===0?iso.slice(5):""}</div>
+      </div>`).join("");
+  }
+  document.getElementById("udaily").innerHTML=html||`<p class="sub">No call-date data.</p>`;
+
+  // duration histogram over the same buckets as the filter
+  const durOrder=DATA.facets.duration||[];
+  const durCounts=durOrder.map(b=>[b,recs.filter(r=>r.demo.duration===b).length]).filter(x=>x[1]>0);
+  const dmax=Math.max(...durCounts.map(x=>x[1]),1);
+  document.getElementById("udur").innerHTML=durCounts.map(([b,n])=>`
+    <div class="hrow"><div class="rlab">${b}</div><div class="track"><div class="fill" style="width:${Math.round(100*n/dmax)}%;background:var(--accent)"></div></div><div class="rpct"><b>${n}</b></div></div>`).join("")
+    ||`<p class="sub">No duration data.</p>`;
+
+  // repeat-use distribution
+  const rbuckets=[["1 call",n=>n===1],["2 calls",n=>n===2],["3–4 calls",n=>n>=3&&n<=4],["5+ calls",n=>n>=5]];
+  const rCounts=rbuckets.map(([lab,f])=>[lab,counts.filter(f).length]).filter(x=>x[1]>0);
+  const rmax=Math.max(...rCounts.map(x=>x[1]),1);
+  document.getElementById("urepeat").innerHTML=rCounts.map(([lab,n])=>`
+    <div class="hrow"><div class="rlab">${lab}</div><div class="track"><div class="fill" style="width:${Math.round(100*n/rmax)}%;background:var(--accent)"></div></div><div class="rpct"><b>${n}</b></div></div>`).join("")
+    ||`<p class="sub">No caller IDs in this data.</p>`;
+}
+
+function dimStats(recs){
+  return DATA.dimensions.map(d=>{
+    let pass=0,fail=0;
+    for(const r of recs){const v=r.dims[d.id]; if(v==="pass")pass++; else if(v==="fail")fail++;}
+    const obs=pass+fail;
+    return {...d, obs, pass, rate: obs?Math.round(100*pass/obs):null};
+  });
+}
+function recRate(recs){return recs.length?Math.round(100*recs.filter(r=>r.recommend==="pass").length/recs.length):0;}
+// Standard error of the A-vs-B pass-rate difference, in percentage points
+// (two-proportion SE: sqrt(pa(1-pa)/na + pb(1-pb)/nb) over observed calls only).
+function seDiff(a,b){
+  const pa=a.pass/a.obs, pb=b.pass/b.obs;
+  return 100*Math.sqrt(pa*(1-pa)/a.obs + pb*(1-pb)/b.obs);
+}
+// "MM/DD–MM/DD" span of the calls in view (needs r.day; null when absent)
+function dayRange(recs){
+  const ds=recs.map(r=>r.day).filter(Boolean).sort();
+  if(!ds.length) return null;
+  const f=d=>d.slice(5).replace("-","/");
+  return ds[0]===ds[ds.length-1]?f(ds[0]):`${f(ds[0])}–${f(ds[ds.length-1])}`;
+}
+
+function renderControls(){
+  const opt=(v,sel)=>`<option value="${v.id}" ${sel?"selected":""}>${v.label} (n=${v.n})</option>`;
+  document.getElementById("variant").innerHTML=DATA.variants.map(v=>opt(v,v.id===state.variant)).join("");
+  document.getElementById("compareTo").innerHTML=`<option value="">— none —</option>`+
+    DATA.variants.filter(v=>v.id!==state.variant).map(v=>`<option value="${v.id}" ${v.id===state.compareTo?"selected":""}>${v.label}</option>`).join("");
+}
+
+function variantFacetKeys(vid){
+  const recs=recordsFor(vid);
+  return Object.keys(FACET_LABELS).filter(key=>{
+    const vals=new Set(recs.map(r=>r.demo[key]).filter(v=>v&&v!=="Unknown"));
+    return vals.size>=2;  // only facets that actually vary for this variant
+  });
+}
+
+function renderFilters(){
+  const keys=variantFacetKeys(state.variant);
+  const show=keys.length>0;
+  document.getElementById("filterpanel").classList.toggle("hidden",!show);
+  document.getElementById("nodemo").classList.toggle("hidden",show);
+  if(!show) return;
+  document.getElementById("filterpanel").classList.toggle("closed",!state.filtersOpen);
+  const nAct=Object.values(state.filters).filter(a=>a&&a.length).length;
+  const tog=document.getElementById("ftoggle");
+  tog.innerHTML=`Filters${nAct?`<span class="fcount">${nAct}</span>`:""} <span style="color:var(--faint)">${state.filtersOpen?"▾":"▸"}</span>`;
+  tog.onclick=()=>{state.filtersOpen=!state.filtersOpen; if(!state.filtersOpen)state.openFacet=null; render();};
+  const host=document.getElementById("filters"); host.innerHTML="";
+  for(const key of keys){
+    const sel=state.filters[key]||[];
+    const present=new Set(recordsFor(state.variant).map(r=>r.demo[key]));
+    const open=state.openFacet===key;
+    const dd=document.createElement("div"); dd.className="dd";
+    const boxes=DATA.facets[key].filter(v=>present.has(v)).map(v=>`<label class="opt"><input type="checkbox" value="${v}" ${sel.includes(v)?"checked":""}> ${v}</label>`).join("");
+    dd.innerHTML=`<button class="ddbtn ${sel.length?"on":""}">${FACET_LABELS[key]}${sel.length?`<span class="n">${sel.length}</span>`:""} <span style="color:var(--faint)">▾</span></button>
+      <div class="ddmenu ${open?"":"hidden"}">${boxes}</div>`;
+    dd.querySelector(".ddbtn").onclick=e=>{e.stopPropagation(); state.openFacet=open?null:key; render();};
+    dd.querySelector(".ddmenu").onclick=e=>e.stopPropagation();
+    dd.querySelectorAll("input").forEach(cb=>cb.onchange=()=>{
+      const cur=new Set(state.filters[key]||[]);
+      cb.checked?cur.add(cb.value):cur.delete(cb.value);
+      state.filters[key]=[...cur];
+      state.selectedDim=null; render();
+    });
+    host.appendChild(dd);
+  }
+  if(nAct){
+    const reset=document.createElement("button"); reset.className="btn"; reset.textContent="Reset";
+    reset.style.borderRadius="20px";
+    reset.onclick=()=>{state.filters={}; state.selectedDim=null; render();};
+    host.appendChild(reset);
+  }
+}
+document.addEventListener("click",()=>{if(state.openFacet){state.openFacet=null; render();}});
+
+function render(){
+  renderControls();
+  document.getElementById("srcnote").textContent="Source: "+DATA.source;
+  // Usage page only exists when records carry raw usage fields (day/duration);
+  // Prompt change page only when the build embedded a prompt diff.
+  const usable=DATA.records.some(r=>r.day||r.dur!=null);
+  const hasDiff=Object.keys(DATA.promptDiffs||{}).length>0;
+  const tabs=document.getElementById("pagetabs");
+  tabs.classList.toggle("hidden",!(usable||hasDiff));
+  tabs.querySelectorAll("button").forEach(b=>{
+    b.classList.toggle("hidden",(b.dataset.page==="usage"&&!usable)||(b.dataset.page==="prompt"&&!hasDiff));
+    b.classList.toggle("on",b.dataset.page===state.page);
+    b.onclick=()=>{state.page=b.dataset.page; state.selectedDim=null; state.openFacet=null; render();};
+  });
+  const onUsage=usable&&state.page==="usage";
+  const onPrompt=hasDiff&&state.page==="prompt";
+  document.getElementById("qualitypage").classList.toggle("hidden",onUsage||onPrompt);
+  document.getElementById("usagepage").classList.toggle("hidden",!onUsage);
+  document.getElementById("promptpage").classList.toggle("hidden",!onPrompt);
+  document.querySelector(".vctl").style.visibility=(onUsage||onPrompt)?"hidden":"visible";
+  if(onPrompt){
+    document.getElementById("filterpanel").classList.add("hidden");
+    document.getElementById("nodemo").classList.add("hidden");
+    renderPromptPage(); return;
+  }
+  renderFilters();
+  if(onUsage){renderUsage(); return;}
+  const recs=filtered(), stats=dimStats(recs);
+  // Inline compare: same demographic filters applied to the B arm; B hidden if
+  // its filtered slice is under MIN_CELL (small-cell suppression applies to both).
+  const cmp=state.compareTo;
+  const bRecs=cmp?filtered(cmp):null;
+  const bOk=!!cmp&&bRecs.length>=MIN_CELL;
+  const bStats=bOk?Object.fromEntries(dimStats(bRecs).map(s=>[s.id,s])):{};
+  const active=Object.values(state.filters).filter(a=>a&&a.length).length;
+  const meta=document.getElementById("metaN");
+  if(meta) meta.innerHTML=`<b>${recs.length}</b> of ${vById[state.variant].n} calls`+(active?` · ${active} filter${active>1?"s":""}`:"");
+  document.getElementById("swtitle").textContent=`${vById[state.variant].label} — strengths & weaknesses`+(bOk?` · vs ${vById[cmp].label}`:"");
+
+  const small=recs.length<MIN_CELL;
+  const sup=document.getElementById("suppress");
+  const bNote=!small&&cmp&&!bOk;
+  sup.classList.toggle("hidden",!(small||bNote));
+  if(small) sup.innerHTML=`<span>⚠</span><span>Only ${recs.length} call(s) in view (under ${MIN_CELL}) — rates hidden; broaden the filter or pick a variant with more calls.</span>`;
+  else if(bNote) sup.innerHTML=`<span>⚠</span><span>${vById[cmp].label} has only ${bRecs.length} call(s) in this view (under ${MIN_CELL}) — comparison hidden; broaden the filter.</span>`;
+
+  const wA=dayRange(recs), wB=bOk?dayRange(bRecs):null;
+  document.getElementById("callsinview").innerHTML=
+    bOk?`<b>${recs.length}</b> calls${wA?` (${wA})`:""} · <b>${bRecs.length}</b> calls${wB?` (${wB})`:""}`
+       :`<b>${recs.length}</b> call${recs.length!==1?"s":""} in view${wA?` · ${wA}`:""}`;
+
+  const bars=document.getElementById("dimbars");
+  if(small){bars.innerHTML=""; document.getElementById("callout").innerHTML=""; renderWhy(recs,null,false); return;}
+  const sorted=[...stats].filter(s=>s.rate!==null).sort((a,b)=>b.rate-a.rate);
+  const naDims=[...stats].filter(s=>s.rate===null);
+  const legendHint=document.querySelector(".legend span:last-child");
+  legendHint.innerHTML=bOk?"Δ = compare − selected, in points, ±1 standard error · click a row for failing calls ↓":"click a dimension to see why it fails ↓";
+  const MAXD=bOk?Math.max(...sorted.map(s=>{const b=bStats[s.id]; return b&&b.rate!==null?Math.abs(b.rate-s.rate):0;}),1):1;
+  const rowHtml=s=>{
+    const sel=state.selectedDim===s.id?"sel":"";
+    const aSide=`
+      <div class="rlab"><small>${s.section}</small>${s.name}</div>
+      <div class="track"><div class="fill" style="width:${s.rate}%;background:${fillColor(s.rate)}"></div></div>
+      <div class="rpct"><b>${s.rate}%</b> <small>(${s.obs})</small></div>`;
+    if(!bOk) return `<div class="row ${sel}" data-dim="${s.id}">${aSide}</div>`;
+    const b=bStats[s.id];
+    let bSide=`<div class="dwrap"><div class="ddbar axis"></div><div class="ddbar"></div></div><div class="rpct"><small>no data</small></div>`;
+    if(b&&b.rate!==null){
+      const d=b.rate-s.rate;
+      const se=seDiff(s,b);
+      const lo=Math.round(d-1.96*se), hi=Math.round(d+1.96*se);
+      const dc=d>0?"var(--pass)":d<0?"var(--fail)":"var(--faint)";
+      const w=Math.round(Math.abs(d)/MAXD*100);
+      const left=d<0?`<div class="fill" style="width:${w}%;background:var(--fail);margin-left:auto;border-radius:7px 0 0 7px"></div>`:"";
+      const right=d>0?`<div class="fill" style="width:${w}%;background:var(--pass);border-radius:0 7px 7px 0"></div>`:"";
+      bSide=`
+      <div class="dwrap"><div class="ddbar axis">${left}</div><div class="ddbar">${right}</div></div>
+      <div class="rpct" title="${b.rate}% (${b.obs} observed) vs ${s.rate}% (${s.obs}) · difference ${d>0?"+":""}${d} pp, standard error ±${Math.round(se)} pp · 95% CI ${lo>0?"+":""}${lo} to ${hi>0?"+":""}${hi} pp"><span class="delta" style="color:${dc}">${d>0?"+"+d:d<0?d:"±0"}</span> <small>±${Math.round(se)}</small></div>`;
+    }
+    return `<div class="row cmp5 ${sel}" data-dim="${s.id}">${aSide}${bSide}</div>`;
+  };
+  const hdr=bOk?`<div class="row cmp5" style="cursor:default">
+      <div></div><div class="abhdr">${vById[state.variant].label}</div><div></div>
+      <div class="abhdr" style="display:flex;justify-content:space-between;gap:8px;padding:0 4px"><span style="color:var(--fail)">◂ worse</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${vById[cmp].label}</span><span style="color:var(--pass)">better ▸</span></div><div></div></div>`:"";
+  bars.innerHTML=hdr+sorted.map(rowHtml).join("")
+    + naDims.map(s=>`
+    <div class="row ${bOk?"cmp5":""}" data-dim="${s.id}" style="opacity:.5">
+      <div class="rlab"><small>${s.section}</small>${s.name}</div>
+      <div class="track"><div class="fill" style="width:0%"></div></div>
+      <div class="rpct"><small>N/A</small></div>${bOk?'<div class="dwrap"><div class="ddbar axis"></div><div class="ddbar"></div></div><div class="rpct"></div>':""}
+    </div>`).join("");
+  bars.querySelectorAll(".row[data-dim]").forEach(el=>el.onclick=()=>{state.selectedDim=el.dataset.dim===state.selectedDim?null:el.dataset.dim; render(); if(state.selectedDim)document.getElementById("whypanel").scrollIntoView({behavior:"smooth",block:"nearest"});});
+
+  const best=sorted[0], worst=sorted[sorted.length-1];
+  if(bOk){
+    const deltas=sorted.filter(s=>bStats[s.id]&&bStats[s.id].rate!==null)
+                       .map(s=>({name:s.name, d:bStats[s.id].rate-s.rate, se:Math.round(seDiff(s,bStats[s.id]))}))
+                       .sort((x,y)=>y.d-x.d);
+    const gain=deltas[0], drop=deltas[deltas.length-1];
+    document.getElementById("callout").innerHTML=`
+    <div class="co"><span class="tag g">Biggest gain</span> <b>${gain&&gain.d>0?`${gain.name} +${gain.d}`:"—"}</b>${gain&&gain.d>0?` <small style="color:var(--faint)">±${gain.se}</small>`:""}</div>
+    <div class="co"><span class="tag r">Biggest drop</span> <b>${drop&&drop.d<0?`${drop.name} ${drop.d}`:"—"}</b>${drop&&drop.d<0?` <small style="color:var(--faint)">±${drop.se}</small>`:""}</div>`;
+  } else {
+    document.getElementById("callout").innerHTML=`
+    <div class="co"><span class="tag g">Top strength</span> <b>${best.name} · ${best.rate}%</b></div>
+    <div class="co"><span class="tag r">Top weakness</span> <b>${worst.name} · ${worst.rate}%</b><p class="quote">Click it above to read the failing calls.</p></div>`;
+  }
+  renderWhy(recs,bRecs,bOk);
+}
+
+function renderWhy(recs,bRecs,bOk){
+  const panel=document.getElementById("whypanel");
+  if(!state.selectedDim){panel.classList.add("hidden"); return;}
+  const dim=DATA.dimensions.find(d=>d.id===state.selectedDim);
+  // One arm at a time, never mixed. Default: the selected coach; when a compare
+  // arm is in view, tabs switch the panel between the two arms.
+  const arms=[{id:state.variant, label:vById[state.variant].label, recs}];
+  if(bOk) arms.push({id:state.compareTo, label:vById[state.compareTo].label, recs:bRecs});
+  if(!arms.some(a=>a.id===state.whyArm)) state.whyArm=state.variant;
+  const cur=arms.find(a=>a.id===state.whyArm);
+  const fails=cur.recs.filter(r=>r.dims[state.selectedDim]==="fail");
+  panel.classList.remove("hidden");
+  const tabs=arms.length>1
+    ?` <span class="armtabs">${arms.map(a=>`<button data-arm="${a.id}" class="${a.id===state.whyArm?"on":""}">${a.label}</button>`).join("")}</span>`
+    :` <span style="font-weight:400;color:var(--muted);font-size:13px">· ${cur.label} only</span>`;
+  document.getElementById("whytitle").innerHTML=`Why “${dim.name}” fails${tabs} <span style="font-weight:400;color:var(--muted);font-size:13px">— the judge's reasoning on each failing call (${fails.length} failing, up to 8 shown)</span>`;
+  document.querySelectorAll("#whytitle .armtabs button").forEach(b=>b.onclick=e=>{e.stopPropagation(); state.whyArm=b.dataset.arm; render();});
+  document.getElementById("whylist").innerHTML=fails.slice(0,8).map(r=>{
+    const q=r.why[state.selectedDim]||r.summary||"(no evidence captured)"; const d=r.demo;
+    const chip=(k,v)=>`<span class="chip"><b>${k}</b> ${v}</span>`;
+    const chips=[chip(DATA.idLabel||"CEO ID",r.ceo||"?")];
+    if(r.day) chips.push(chip("Date",r.day));
+    if(typeof r.dur==="number") chips.push(chip("Length",r.dur+" min"));
+    [["Site",d.site],["Referral",d.population],["Age",d.age],["Education",d.education]]
+      .forEach(([k,v])=>{if(v&&v!=="Unknown")chips.push(chip(k,v));});
+    return `<div class="whycard">
+      <div class="chips" style="margin:0 0 9px">${chips.join("")}</div>
+      <div style="font-size:10px;font-weight:600;color:var(--faint);text-transform:uppercase;letter-spacing:.05em">Judge's reasoning</div>
+      <p class="quote" style="margin-top:3px">${q}</p>
+    </div>`;
+  }).join("") || `<p class="sub">No failing calls for this dimension here.</p>`;
+}
+
+function renderPromptPage(){
+  const key=Object.keys(DATA.promptDiffs)[0];
+  const diff=DATA.promptDiffs[key]||[];
+  const [a,b]=key.split("|");
+  document.getElementById("ptakeaways").innerHTML=
+    (DATA.promptTakeaways||[]).map(t=>`<li>${t}</li>`).join("")
+    ||`<li>(no takeaways yet — rebuild with ANTHROPIC_API_KEY set to auto-generate them, or edit PROMPT_TAKEAWAYS in build_ab_dashboard.py)</li>`;
+  document.getElementById("pdifftitle").textContent=`Full prompt diff — ${(vById[a]||{}).label||a} → ${(vById[b]||{}).label||b}`;
+  document.getElementById("pdiffnote").textContent="− line from the old prompt · + line from the new prompt (line-level diff of the Vapi system prompts, fetched at build time)";
+  document.getElementById("pdiff").innerHTML=
+    `<div class="diff">${diff.map(l=>`<div class="${l.type}">${l.type==="del"?"−":"+"} ${l.text}</div>`).join("")}</div>`;
+}
+
+document.getElementById("variant").onchange=e=>{state.variant=e.target.value; if(state.compareTo===state.variant)state.compareTo=null; state.filters={}; state.selectedDim=null; state.whyArm=null; render();};
+document.getElementById("compareTo").onchange=e=>{state.compareTo=e.target.value||null; state.whyArm=null; render();};
+render();
+</script>
+</body>
+</html>
