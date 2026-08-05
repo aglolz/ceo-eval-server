@@ -436,7 +436,17 @@ def handle_call_webhook(payload, judges, table_name):
 
     # Run judges in parallel
     def run_single_judge(judge_dict):
-        """Run one judge and return (judge_name, result)."""
+        """Run one judge and return (judge_name, result).
+
+        run_judge already catches anthropic.APIError internally, but a raw
+        connection/SSL exception can escape that (confirmed in practice —
+        "unknown error (_ssl.c:4293)"). Uncaught, that exception propagates
+        through future.result() below with nothing catching it further up
+        the stack, which skips the Supabase write entirely and drops the
+        call from Supabase with no trace at all — the same failure this
+        function's caller already guards against for the no-transcript case,
+        just via a different trigger. Retry a couple of times, then degrade
+        to a normal error verdict instead of letting it propagate."""
         j = judge_dict
         rubric_path = PROMPTS_DIR / j["prompt"]
         if not rubric_path.exists():
@@ -444,9 +454,19 @@ def handle_call_webhook(payload, judges, table_name):
             return (j["name"], {"verdict": "error", "reasoning": "prompt file missing"})
 
         logger.info(f"  Running {j['name']}...")
-        result = run_judge(transcript, rubric_path)
-        logger.info(f"  {j['name']}: {result['verdict']}")
-        return (j["name"], result)
+        last_err = None
+        for attempt in range(3):
+            try:
+                result = run_judge(transcript, rubric_path)
+                logger.info(f"  {j['name']}: {result['verdict']}")
+                return (j["name"], result)
+            except Exception as e:
+                last_err = e
+                logger.warning(f"  {j['name']}: attempt {attempt + 1}/3 raised {e}")
+                if attempt < 2:
+                    time.sleep(2)
+        logger.error(f"  {j['name']}: failed after 3 attempts with raw exception: {last_err}")
+        return (j["name"], {"verdict": "error", "reasoning": f"exception: {last_err}"})
 
     scores = {}
     with ThreadPoolExecutor(max_workers=len(judges_to_run) or 1) as executor:
