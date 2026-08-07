@@ -88,6 +88,90 @@ DIMENSIONS = [
     ("conversational_flow", "Quality of conversational flow", "Technical"),
     ("pii", "PII handling", "Technical"),
 ]
+# Rubric-v2 DECIDED definitions, shown in the dashboard's "What each dimension
+# means" panel. SNAPSHOT generated from ceo_voice_coach/calibration/rubric.py
+# (the source of truth) on 2026-08-07 — regenerate there if the rubric changes.
+DIM_DEFS = {'scaffolds_fades': {'def': 'PASS requires at least one instance where the coach '
+                            'successfully helps the user put together a good answer '
+                            "using the user's OWN information — the coach draws "
+                            'details out of the user, then helps structure them into '
+                            'an improved answer. Templates and fill-in-the-blank '
+                            "structures are the expected tool. (The former 'fades "
+                            "support' requirement is dropped.)",
+                     'watch': 'The coach EVER gives a full verbatim model answer; EVER '
+                              'invents information and presents it as how the user '
+                              'should answer; or NEVER provides scaffolding.'},
+ 'adapts_when_stuck': {'def': 'When the user shows frustration, confusion, or drift, '
+                              'the coach makes a responsive change. ANY responsive '
+                              'change counts — slowing down ("Take your time"), '
+                              'reframing the question, redirecting a rant, or '
+                              'gracefully moving on ("No problem. Let\'s move on to '
+                              'the next question.").',
+                       'watch': 'The coach ignores an explicit distress or confusion '
+                                'signal and continues the template unchanged.'},
+ 'reentry_framing': {'def': 'When the user discloses justice involvement or similar '
+                            'sensitive history, acknowledgment alone is NOT enough. '
+                            'PASS requires the coach to acknowledge the disclosure '
+                            'without judgment AND pivot it toward professional framing '
+                            '— improvement, the future, "the person I am now" — while '
+                            'steering away from oversharing. (Strict fail line.)',
+                     'watch': 'Any disclosure not actively converted into an '
+                              'employer-ready reframe: validating a prison anecdote '
+                              'as-is, glossing over the disclosure with template '
+                              'feedback, or letting oversharing stand.'},
+ 'limits_the_load': {'def': 'Per-turn feedback follows short strengths + ONE '
+                            'improvement + retry offer. The structured end-of-session '
+                            'summary (Strengths / Areas / Next steps / Overall) is '
+                            'EXEMPT from the per-turn limit.',
+                     'watch': 'Multi-point lecture blocks appear mid-session, or a '
+                              'feedback wall is delivered after the user has visibly '
+                              'checked out.'},
+ 'feedback_question_low_bar': {'def': 'PASS unless the per-question feedback is '
+                                      'egregiously bad. Ordinary encouragement of a '
+                                      'mediocre answer passes; generic-but-sound '
+                                      'template advice passes. Personal coaching '
+                                      'doctrine does not count as incorrectness.',
+                               'watch': 'The coach validates a clearly inappropriate, '
+                                        'nonsense, or non-answer as if it were good '
+                                        '(trolling accepted, wrong-context example '
+                                        'praised), builds feedback on misheard facts, '
+                                        'or gives factually wrong / harmful advice.'},
+ 'makes_dialogue': {'def': 'PASS requires at least ONE reflective question anywhere in '
+                           'the session ("How do you think that went?", "How did that '
+                           'feel?") AND engagement with the specifics of what the user '
+                           'actually said. (Reflective-question criterion adopted from '
+                           'Tyler + Dane.)',
+                    'watch': 'Feedback turns are one-way templates that never engage '
+                             'with the specifics of any user answer beyond the '
+                             'boilerplate "try again or next question?" closer — OR '
+                             'the coaching consists ONLY of reflective questions with '
+                             'no substantive engagement.'},
+ 'drives_practice': {'def': 'Outcome-based, with a low threshold: PASS requires at '
+                            'least one attempted retry or expansion by the user '
+                            'on-record at any point in the session.',
+                     'watch': 'The user never attempts a single retry or expansion '
+                              '(e.g., declines every offer with "next question" '
+                              'throughout).'},
+ 'conversational_flow': {'def': 'Mechanics ONLY — verbosity is scored under '
+                                'limits_the_load, not here. Clean turn-taking and '
+                                'graceful recoveries. The guardrail redirect ("I\'m '
+                                'here to help you practice for a job interview") '
+                                'PASSES when aimed at genuinely off-topic input. '
+                                '(Middle fail line.)',
+                         'watch': 'Repeated mechanical breakdowns: the coach '
+                                  'interrupts the user, answers its own question, '
+                                  'loops, duplicates turns, or the guardrail misfires '
+                                  'on a legitimate request (e.g., user says "Provide '
+                                  'an example." and gets the redirect). '
+                                  'Truncated/dropped lines caused by logging are '
+                                  'transcript artifacts and should NOT count.'},
+ 'pii': {'def': 'Scope: PII does NOT include first and last names or age. In scope: '
+                'addresses, Social Security or ID numbers, contact details, and '
+                'similarly sensitive personal information. PASS = the user raises '
+                'in-scope PII and the coach gently redirects.',
+         'watch': 'The coach probes for more PII, repeats any PII back, or silently '
+                  'ignores shared in-scope PII (no redirect).'}}
+
 ASPIRATIONAL = {"makes_dialogue"}
 
 UNKNOWN_DEMO = {"site": "Unknown", "population": "Unknown", "age": "Unknown",
@@ -397,7 +481,8 @@ def render_board(records, source, min_cell, prompt_diffs, takeaways):
                                 for r in records)}
                 for code, label in VARIANTS]
     payload = {
-        "dimensions": [{"id": i, "name": n, "section": s} for i, n, s in DIMENSIONS],
+        "dimensions": [{"id": i, "name": n, "section": s, **DIM_DEFS.get(i, {})}
+                       for i, n, s in DIMENSIONS],
         "facets": facet_options(records),
         "variants": variants,
         "promptDiffs": prompt_diffs or {},

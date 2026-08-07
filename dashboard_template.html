@@ -63,6 +63,13 @@
   .dwrap .ddbar{flex:1}
   .abhdr{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);padding-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .delta{font-weight:600}
+  .dimdefs{margin-bottom:14px;font-size:12.5px;border:1px solid var(--line);border-radius:8px;padding:8px 12px}
+  .dimdefs summary{cursor:pointer;color:var(--muted);font-weight:600;user-select:none}
+  .dimdefs .dd{margin:10px 0 0}
+  .dimdefs .dd b{display:block;margin-bottom:2px}
+  .dimdefs .dd b small{color:var(--faint);font-weight:400;margin-left:6px}
+  .dimdefs .dd p{margin:0;color:var(--muted);line-height:1.45}
+  .dimdefs .dd p.wf{color:var(--faint);margin-top:2px}
   .rpct{text-align:right;font-size:13px}
   .rpct b{font-weight:600}
   .rpct small{color:var(--faint)}
@@ -137,6 +144,7 @@
       <span style="color:var(--faint)" title="A dimension is N/A on a call when the judge had no chance to observe it — those calls don't count toward the pass rate.">(n) = calls scored on that dimension; N/A excluded</span>
       <span style="margin-left:auto;color:var(--faint)">click a dimension to see why it fails ↓</span>
     </div>
+    <details id="dimdefs" class="dimdefs hidden"><summary>What each dimension means</summary><div id="dimdefslist"></div></details>
     <div id="suppress" class="warn hidden"></div>
     <div id="dimbars"></div>
     <div class="callout" id="callout"></div>
@@ -399,7 +407,7 @@ function render(){
   const sorted=[...stats].filter(s=>s.rate!==null).sort((a,b)=>b.rate-a.rate);
   const naDims=[...stats].filter(s=>s.rate===null);
   const legendHint=document.querySelector(".legend span:last-child");
-  legendHint.innerHTML=bOk?"Δ = compare − selected, in points, ±1 standard error · click a row for failing calls ↓":"click a dimension to see why it fails ↓";
+  legendHint.innerHTML=bOk?"Δ = compare − selected, in percentage points (pp, not % change), ±1 standard error · click a row for failing calls ↓":"click a dimension to see why it fails ↓";
   const MAXD=bOk?Math.max(...sorted.map(s=>{const b=bStats[s.id]; return b&&b.rate!==null?Math.abs(b.rate-s.rate):0;}),1):1;
   const rowHtml=s=>{
     const sel=state.selectedDim===s.id?"sel":"";
@@ -420,7 +428,7 @@ function render(){
       const right=d>0?`<div class="fill" style="width:${w}%;background:var(--pass);border-radius:0 7px 7px 0"></div>`:"";
       bSide=`
       <div class="dwrap"><div class="ddbar axis">${left}</div><div class="ddbar">${right}</div></div>
-      <div class="rpct" title="${b.rate}% (${b.obs} observed) vs ${s.rate}% (${s.obs}) · difference ${d>0?"+":""}${d} pp, standard error ±${Math.round(se)} pp · 95% CI ${lo>0?"+":""}${lo} to ${hi>0?"+":""}${hi} pp"><span class="delta" style="color:${dc}">${d>0?"+"+d:d<0?d:"±0"}</span> <small>±${Math.round(se)}</small></div>`;
+      <div class="rpct" title="${b.rate}% (${b.obs} observed) vs ${s.rate}% (${s.obs}) · difference ${d>0?"+":""}${d} pp, standard error ±${Math.round(se)} pp · 95% CI ${lo>0?"+":""}${lo} to ${hi>0?"+":""}${hi} pp"><span class="delta" style="color:${dc}">${d>0?"+"+d:d<0?d:"±0"} pp</span> <small>±${Math.round(se)} (${b.obs})</small></div>`;
     }
     return `<div class="row cmp5 ${sel}" data-dim="${s.id}">${aSide}${bSide}</div>`;
   };
@@ -443,8 +451,8 @@ function render(){
                        .sort((x,y)=>y.d-x.d);
     const gain=deltas[0], drop=deltas[deltas.length-1];
     document.getElementById("callout").innerHTML=`
-    <div class="co"><span class="tag g">Biggest gain</span> <b>${gain&&gain.d>0?`${gain.name} +${gain.d}`:"—"}</b>${gain&&gain.d>0?` <small style="color:var(--faint)">±${gain.se}</small>`:""}</div>
-    <div class="co"><span class="tag r">Biggest drop</span> <b>${drop&&drop.d<0?`${drop.name} ${drop.d}`:"—"}</b>${drop&&drop.d<0?` <small style="color:var(--faint)">±${drop.se}</small>`:""}</div>`;
+    <div class="co"><span class="tag g">Biggest gain</span> <b>${gain&&gain.d>0?`${gain.name} +${gain.d} pp`:"—"}</b>${gain&&gain.d>0?` <small style="color:var(--faint)">±${gain.se}</small>`:""}</div>
+    <div class="co"><span class="tag r">Biggest drop</span> <b>${drop&&drop.d<0?`${drop.name} ${drop.d} pp`:"—"}</b>${drop&&drop.d<0?` <small style="color:var(--faint)">±${drop.se}</small>`:""}</div>`;
   } else {
     document.getElementById("callout").innerHTML=`
     <div class="co"><span class="tag g">Top strength</span> <b>${best.name} · ${best.rate}%</b></div>
@@ -501,6 +509,16 @@ function renderPromptPage(){
 
 document.getElementById("variant").onchange=e=>{state.variant=e.target.value; if(state.compareTo===state.variant)state.compareTo=null; state.filters={}; state.selectedDim=null; state.whyArm=null; render();};
 document.getElementById("compareTo").onchange=e=>{state.compareTo=e.target.value||null; state.whyArm=null; render();};
+(()=>{ // dimension definitions (rubric v2) — hidden when the payload predates them
+  const defs=DATA.dimensions.filter(d=>d.def);
+  if(!defs.length)return;
+  const box=document.getElementById("dimdefs");
+  document.getElementById("dimdefslist").innerHTML=defs.map(d=>`
+    <div class="dd"><b>${d.name}<small>${d.section}</small></b>
+      <p>${d.def}</p>${d.watch?`<p class="wf"><b style="display:inline">Fails when:</b> ${d.watch}</p>`:""}
+    </div>`).join("");
+  box.classList.remove("hidden");
+})();
 render();
 </script>
 </body>
