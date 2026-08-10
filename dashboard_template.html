@@ -55,7 +55,8 @@
   .rlab small{display:block;font-size:10px;color:var(--faint);text-transform:uppercase;letter-spacing:.04em}
   .track{height:18px;background:#efece5;border-radius:7px;overflow:hidden}
   .fill{height:100%;border-radius:7px}
-  .row.cmp5{grid-template-columns:230px 1fr 58px 1fr 78px;cursor:pointer}
+  .row.cmp5{grid-template-columns:230px 1fr 74px 1fr 116px;cursor:pointer}
+  .row.cmp5 .rpct{white-space:nowrap}
   .armtabs{display:inline-flex;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:2px;gap:2px;vertical-align:middle}
   .armtabs button{font:12px inherit;border:none;background:none;color:var(--muted);border-radius:6px;padding:4px 10px;cursor:pointer}
   .armtabs button.on{background:var(--surface);color:var(--ink);font-weight:600;box-shadow:0 1px 2px rgba(0,0,0,.08)}
@@ -96,6 +97,10 @@
   .upair{display:grid;grid-template-columns:1fr 1fr;gap:18px}
   .colchart{display:flex;align-items:flex-end;gap:3px;height:150px;margin-top:14px}
   .colwrap{flex:1;display:flex;flex-direction:column;align-items:center;gap:0;height:100%;justify-content:flex-end;min-width:0}
+  .colclick{cursor:pointer}
+  .colclick:hover .colbar{opacity:.7}
+  .uback{font-size:12px;font-weight:400;margin-left:10px;color:var(--accent);text-decoration:none}
+  .uback:hover{text-decoration:underline}
   .colbar{width:100%;max-width:34px;background:var(--accent);border-radius:4px 4px 0 0;min-height:2px}
   .collab{font-size:10px;color:var(--faint);margin-top:4px;white-space:nowrap;overflow:visible}
   .colval{font-size:10px;color:var(--muted);margin-bottom:2px}
@@ -172,8 +177,8 @@
   <div id="usagepage" class="hidden">
     <div class="cards" id="ucards"></div>
     <section class="panel">
-      <h2>Calls per day</h2>
-      <p class="sub" style="margin:-8px 0 0">All arms combined · demographic filters apply</p>
+      <h2 id="udailytitle">Calls per week</h2>
+      <p class="sub" id="udailysub" style="margin:-8px 0 0">All arms combined · demographic filters apply</p>
       <div class="colchart" id="udaily"></div>
     </section>
     <div class="upair">
@@ -188,7 +193,7 @@
 const DATA = /*__DATA__*/{};
 const FACET_LABELS = {modality:"Modality",site:"Site",population:"Referral population",age:"Age",gender:"Gender",race:"Race / ethnicity",education:"Education",duration:"Call duration",date:"Call week"};
 const MIN_CELL = 8;
-const state = {variant:DATA.variants[0].id, compareTo:null, filters:{}, selectedDim:null, whyArm:null, filtersOpen:true, openFacet:null, page:"quality"};
+const state = {variant:DATA.variants[0].id, compareTo:null, filters:{}, selectedDim:null, whyArm:null, filtersOpen:true, openFacet:null, page:"quality", usageWeek:null};
 const vById = Object.fromEntries(DATA.variants.map(v=>[v.id,v]));
 
 function fillColor(p){return p>=80?"var(--pass)":p>=50?"var(--mix)":"var(--fail)";}
@@ -234,28 +239,55 @@ function renderUsage(){
     ["Median duration",med!=null?med.toFixed(1)+" min":"—"],
   ].map(([l,v])=>`<div class="card"><div class="lab">${l}</div><div class="val">${v}</div></div>`).join("");
 
-  // calls per day (continuous range, gaps = 0)
+  // calls per week (Monday-start, matching the "Call week" facet), gaps = 0;
+  // clicking a week drills into that week's daily view (state.usageWeek = its Monday).
   const days={};
   recs.forEach(r=>{if(r.day)days[r.day]=(days[r.day]||0)+1;});
   const dayKeys=Object.keys(days).sort();
+  const monday=iso=>{const d=new Date(iso+"T00:00:00Z"); d.setUTCDate(d.getUTCDate()-(d.getUTCDay()+6)%7); return d.toISOString().slice(0,10);};
+  const addDays=(iso,n)=>{const d=new Date(iso+"T00:00:00Z"); d.setUTCDate(d.getUTCDate()+n); return d.toISOString().slice(0,10);};
+  const utitle=document.getElementById("udailytitle"), usub=document.getElementById("udailysub");
   let html="";
-  if(dayKeys.length){
-    const daysArr=[];
-    for(let d=new Date(dayKeys[0]+"T00:00:00Z"); daysArr.length<400; d.setUTCDate(d.getUTCDate()+1)){
-      const iso=d.toISOString().slice(0,10);
-      daysArr.push([iso,days[iso]||0]);
-      if(iso===dayKeys[dayKeys.length-1]) break;
-    }
+  if(dayKeys.length&&state.usageWeek){
+    const wk=state.usageWeek;
+    const daysArr=Array.from({length:7},(_,i)=>{const iso=addDays(wk,i); return [iso,days[iso]||0];});
     const max=Math.max(...daysArr.map(x=>x[1]),1);
-    const step=Math.ceil(daysArr.length/12);
-    html=daysArr.map(([iso,n],i)=>`
+    utitle.innerHTML=`Calls per day — wk of ${wk} <a href="#" class="uback" id="uback">← back to weekly</a>`;
+    usub.textContent="All arms combined · demographic filters apply";
+    html=daysArr.map(([iso,n])=>`
       <div class="colwrap" title="${iso} · ${n} call${n!==1?"s":""}">
         ${n?`<div class="colval">${n}</div>`:""}
         <div class="colbar" style="height:${Math.round(104*n/max)+2}px"></div>
-        <div class="collab">${i%step===0?iso.slice(5):""}</div>
+        <div class="collab">${iso.slice(5)}</div>
       </div>`).join("");
+  } else if(dayKeys.length){
+    const weeks={};
+    Object.entries(days).forEach(([iso,n])=>{const wk=monday(iso); weeks[wk]=(weeks[wk]||0)+n;});
+    const lastWk=monday(dayKeys[dayKeys.length-1]);
+    const weeksArr=[];
+    for(let wk=monday(dayKeys[0]); weeksArr.length<400; wk=addDays(wk,7)){
+      weeksArr.push([wk,weeks[wk]||0]);
+      if(wk===lastWk) break;
+    }
+    const max=Math.max(...weeksArr.map(x=>x[1]),1);
+    const step=Math.ceil(weeksArr.length/12);
+    utitle.textContent="Calls per week";
+    usub.textContent="All arms combined · demographic filters apply · click a week for its daily view";
+    html=weeksArr.map(([wk,n],i)=>`
+      <div class="colwrap colclick" data-wk="${wk}" title="Wk of ${wk} · ${n} call${n!==1?"s":""} · click for daily view">
+        ${n?`<div class="colval">${n}</div>`:""}
+        <div class="colbar" style="height:${Math.round(104*n/max)+2}px"></div>
+        <div class="collab">${i%step===0?wk.slice(5):""}</div>
+      </div>`).join("");
+  } else {
+    utitle.textContent="Calls per week";
+    usub.textContent="All arms combined · demographic filters apply";
   }
-  document.getElementById("udaily").innerHTML=html||`<p class="sub">No call-date data.</p>`;
+  const udaily=document.getElementById("udaily");
+  udaily.innerHTML=html||`<p class="sub">No call-date data.</p>`;
+  udaily.querySelectorAll(".colwrap[data-wk]").forEach(el=>el.onclick=()=>{state.usageWeek=el.dataset.wk; render();});
+  const uback=document.getElementById("uback");
+  if(uback)uback.onclick=e=>{e.preventDefault(); state.usageWeek=null; render();};
 
   // duration histogram over the same buckets as the filter
   const durOrder=DATA.facets.duration||[];
