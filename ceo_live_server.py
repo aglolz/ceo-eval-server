@@ -23,6 +23,7 @@ import os
 import logging
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from xml.sax.saxutils import escape
 
 import requests
@@ -61,6 +62,34 @@ ZAPIER_SMS_HOOK_URL = os.environ.get("ZAPIER_SMS_HOOK_URL", "").strip()
 # Delay before sending survey Q1, so the summary SMS — which crawls through the
 # Zapier chain (filter → python → sheets → Twilio) — reliably lands first.
 SURVEY_DELAY_SEC = int(os.environ.get("SURVEY_DELAY_SEC", "75"))
+
+
+# Scoring runs off-request. Nine judges over a 15-30 min transcript hold the
+# request for minutes, but Vapi only waits ~10s for a webhook response before
+# resetting the connection — and gunicorn's --timeout SIGKILLs a worker stuck
+# past 120s, taking any in-progress scoring down with it (seen as
+# "[CRITICAL] WORKER TIMEOUT" in the Aug 4 Railway logs; full diagnosis in
+# WEBHOOK_DROPS_DIAGNOSIS.md). So the webhook acks immediately and this pool
+# does the slow work. Bounded so a burst of end-of-call reports can't stack
+# unlimited judge fan-outs against the Anthropic API. Pool threads are
+# non-daemon: on clean shutdown Python waits for in-flight scoring (up to
+# gunicorn's graceful timeout).
+SCORING_EXECUTOR = ThreadPoolExecutor(
+    max_workers=int(os.environ.get("SCORING_WORKERS", "4")),
+    thread_name_prefix="scoring",
+)
+
+
+def _score_call(payload, table):
+    """Run handle_call_webhook off-request and log the outcome — executor
+    futures are never awaited, so an unlogged exception would vanish."""
+    call_id = payload.get("message", {}).get("call", {}).get("id", "unknown")
+    try:
+        response, status = handle_call_webhook(payload, JUDGES, table)
+        if status != 200:
+            logger.error(f"Call {call_id}: background scoring failed ({status}): {response}")
+    except Exception:
+        logger.exception(f"Call {call_id}: background scoring crashed")
 
 
 def _forward_to_sms(payload):
@@ -120,7 +149,15 @@ def handle_webhook():
             )
             q1.daemon = True
             q1.start()
-        response, status = handle_call_webhook(payload, JUDGES, table)
+        if msg_type == "end-of-call-report":
+            # Ack Vapi now, score later — see SCORING_EXECUTOR above.
+            SCORING_EXECUTOR.submit(_score_call, payload, table)
+            call_id = payload.get("message", {}).get("call", {}).get("id", "unknown")
+            response, status = {"status": "accepted", "call_id": call_id}, 200
+        else:
+            # status-update / speech-update / etc. — handle_call_webhook just
+            # logs and ignores these, fast enough to stay in-request.
+            response, status = handle_call_webhook(payload, JUDGES, table)
     return jsonify(response), status
 
 
