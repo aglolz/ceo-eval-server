@@ -15,10 +15,19 @@ Auth: participant data (CEO IDs, judge reasoning quoting calls) — every route
 requires ?key=<DASHBOARD_TOKEN> (or X-Dashboard-Key header). With the env var
 unset the routes refuse to serve. Set DASHBOARD_TOKEN on Railway.
 
-This is a self-contained port of ceo_voice_coach/build_ab_dashboard.py (the
-source of truth for the build logic) minus the Salesforce demographics join —
-report*.csv stays local-only, so site/population/age/etc. facets show Unknown
-here. dashboard_template.html is copied verbatim from ceo_voice_coach.
+THIS FILE IS THE SOURCE OF TRUTH for the A/B dashboard build logic. It began
+as a port of ceo_voice_coach/build_ab_dashboard.py; the roles reversed
+2026-08-11 — that local builder is now a legacy offline fallback, synced by
+hand FROM this file (never the other direction). This repo's copy of
+dashboard_template.html is canonical too; copy it verbatim into
+ceo_voice_coach if the local builder is still used.
+
+Demographics (site/population/age/gender/race/education facets) join from the
+Supabase participant_demographics table, today seeded by
+ceo_voice_coach/push_demographics.py from the local Salesforce report*.csv
+export. A server-side Salesforce REST pull can replace that seeding without
+touching this file — anything that upserts the same table keyed on the
+normalized CEO ID (see norm_ceo) flows straight to the live boards.
 
 Env used: SUPABASE_URL, SUPABASE_KEY, SUPABASE_TABLE, DASHBOARD_TOKEN,
           DASHBOARD_CACHE_SEC, VAPI_API_KEY (prompt diff + takeaways),
