@@ -56,9 +56,16 @@ TEST_ID_RE = re.compile(
     r"|\btwo[,\s]+two[,\s]+two[,\s]+two\b",
     re.I)
 
+# assistant_id -> arm code, derived from the same ARM_A/ARM_B env vars the
+# router uses (server_lib.handle_assistant_request / _arm_label), so swapping
+# a variant into the test is just the Railway env change plus a VARIANTS label
+# edit. Hardcoded ids remain only as a fallback when the env vars are unset
+# (local dev). Read at import time — Railway restarts on env change anyway.
 ARM_CODE = {
-    "68220648-f7ad-4724-b0c3-0df66619bf0a": "A",
-    "e3225309-921f-43e4-ac0e-6995ff820ce2": "B",
+    os.environ.get("ARM_A_ASSISTANT_ID")
+    or "68220648-f7ad-4724-b0c3-0df66619bf0a": "A",
+    os.environ.get("ARM_B_ASSISTANT_ID")
+    or "e3225309-921f-43e4-ac0e-6995ff820ce2": "B",
 }
 VARIANTS = [
     ("A", "Arm A — 2.0 prompt (sonnet-4-6)"),
