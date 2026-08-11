@@ -12,7 +12,7 @@ It never touches the SMS/survey pipeline (that lives in the Flask route, not
 in handle_call_webhook), and it skips any call_id already present in the
 table, so re-runs are safe.
 
-Usage (local, reads ~/ceo_voice_coach/.env for keys):
+Usage (local; reads env vars, then ./.env, then ~/ceo_voice_coach/.env):
   python3 backfill_missing_calls.py --dry-run          # show what would run
   python3 backfill_missing_calls.py --limit 1          # score one call (bills API)
   python3 backfill_missing_calls.py                    # score everything missing
@@ -33,20 +33,25 @@ from pathlib import Path
 import requests
 from dotenv import load_dotenv
 
-# Keys live in the analysis repo's .env; map its names onto the ones
-# server_lib expects (the Railway env uses VAPI_API_KEY / ARM_*_ASSISTANT_ID).
+# Env resolution, most specific first (load_dotenv never overrides values that
+# are already set): real env vars > this repo's .env > Maya's analysis repo's
+# .env (historical fallback — its VAPI_PRIVATE_KEY is mapped onto the
+# VAPI_API_KEY name server_lib expects).
+load_dotenv(Path(__file__).parent / ".env")
 load_dotenv(Path.home() / "ceo_voice_coach" / ".env")
 os.environ.setdefault("VAPI_API_KEY", os.environ.get("VAPI_PRIVATE_KEY", ""))
 
-ARM_A = "68220648-f7ad-4724-b0c3-0df66619bf0a"
-ARM_B = "e3225309-921f-43e4-ac0e-6995ff820ce2"
-os.environ.setdefault("ARM_A_ASSISTANT_ID", ARM_A)  # so _arm_label() resolves
-os.environ.setdefault("ARM_B_ASSISTANT_ID", ARM_B)
+# Arm assistants: same env vars the server routes with; the hardcoded ids are
+# the 2026-07-28 launch arms, kept as a fallback for local runs without env.
+ARM_A = os.environ.setdefault("ARM_A_ASSISTANT_ID", "68220648-f7ad-4724-b0c3-0df66619bf0a")
+ARM_B = os.environ.setdefault("ARM_B_ASSISTANT_ID", "e3225309-921f-43e4-ac0e-6995ff820ce2")
 
 from server_lib import handle_call_webhook  # noqa: E402  (env must be set first)
 from ceo_live_server import JUDGES, TABLE   # noqa: E402  the live judge roster
 
-LAUNCH = "2026-07-28T00:04:37Z"  # live-number swap (dashboard LIVE_SINCE)
+# Earliest call to reconcile; default is the live-number swap (dashboard
+# LIVE_SINCE). Override with BACKFILL_SINCE to narrow a re-run.
+LAUNCH = os.environ.get("BACKFILL_SINCE", "2026-07-28T00:04:37Z")
 VAPI_H = {"Authorization": f"Bearer {os.environ['VAPI_API_KEY']}"}
 
 
