@@ -53,7 +53,7 @@ logger = logging.getLogger(__name__)
 dash_bp = Blueprint("dashboard", __name__)
 
 TEMPLATE_PATH = Path(__file__).parent / "dashboard_template.html"
-TABLE = os.environ.get("SUPABASE_TABLE", "ankita_test_calls")
+TABLE = os.environ.get("SUPABASE_TABLE", "ceo_live_calls")
 CACHE_SEC = int(os.environ.get("DASHBOARD_CACHE_SEC", "120"))
 PAGE_REFRESH_SEC = 300  # <meta refresh> so an open tab stays live
 
@@ -76,6 +76,9 @@ ARM_CODE = {
     os.environ.get("ARM_B_ASSISTANT_ID")
     or "e3225309-921f-43e4-ac0e-6995ff820ce2": "B",
 }
+# FALLBACK labels only — the boards normally label each arm with its live
+# Vapi assistant name (arm_variants below), so a variant swap needs no code
+# edit at all. These show only when Vapi is unreachable or the key is unset.
 VARIANTS = [
     ("A", "Arm A — 2.0 prompt (sonnet-4-6)"),
     ("B", "Arm B"),
@@ -429,6 +432,16 @@ def fetch_arm_prompts():
     return arms
 
 
+def arm_variants(arms):
+    """Arm display labels from the live Vapi assistant names ("Arm B — <name>"),
+    so putting a new variant into the test is purely the Railway env change —
+    the board picks up the new assistant's name on the next rebuild. Falls back
+    to the static VARIANTS list when Vapi is unreachable/unconfigured."""
+    if not arms:
+        return VARIANTS
+    return [(code, f"Arm {code} — {arms[code]['name']}") for code, _ in VARIANTS]
+
+
 def build_prompt_diffs(arms):
     a, b = arms["A"], arms["B"]
     lines = []
@@ -490,12 +503,13 @@ def build_prompt_takeaways(arms):
 
 # ── page rendering + cache ──────────────────────────────────────────────────
 
-def render_board(records, source, min_cell, prompt_diffs, takeaways):
+def render_board(records, source, min_cell, prompt_diffs, takeaways,
+                 variant_labels=None):
     variants = [{"id": code, "label": label,
                  "n": sum(r["variant"] == code for r in records),
                  "hasDemo": any(r["variant"] == code and r["demo"]["site"] != "Unknown"
                                 for r in records)}
-                for code, label in VARIANTS]
+                for code, label in (variant_labels or VARIANTS)]
     payload = {
         "dimensions": [{"id": i, "name": n, "section": s, **DIM_DEFS.get(i, {})}
                        for i, n, s in DIMENSIONS],
@@ -542,6 +556,7 @@ def build_pages():
     arms = fetch_arm_prompts()
     prompt_diffs = build_prompt_diffs(arms) if arms else {}
     takeaways = build_prompt_takeaways(arms) if arms and prompt_diffs else []
+    variant_labels = arm_variants(arms)
 
     stamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
     demo_note = (f"demographics joined for {len(demo_map)} participants"
@@ -552,11 +567,11 @@ def build_pages():
     pages = {
         "test": render_board(test_recs,
                              f"TEST calls (CEO ID {TEST_CEO_ID} or pre-live) {judged_by}",
-                             8, prompt_diffs, takeaways),
+                             8, prompt_diffs, takeaways, variant_labels),
         # Small-cell rule from HANDOVER_PLAN: no rates for slices under 10 calls.
         "live": render_board(real_recs,
                              f"REAL participant calls (live number, verified CEO ID) {judged_by}",
-                             10, prompt_diffs, takeaways),
+                             10, prompt_diffs, takeaways, variant_labels),
     }
     for k, v in pages.items():
         _page_cache[k] = {"ts": now, "html": v}

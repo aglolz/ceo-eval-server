@@ -1,7 +1,7 @@
 """
 Shared library for CEO Voice Coach Eval pipelines.
 Contains judge runners, transcript fetcher, and Supabase writer.
-Individual servers (ankita_server.py, maya_server.py, ceo_live_server.py)
+Individual servers (ceo_live_server.py = production, maya_server.py = test)
 import this and define their JUDGES list and TABLE name.
 """
 
