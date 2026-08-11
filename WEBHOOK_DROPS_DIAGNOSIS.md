@@ -5,7 +5,10 @@
 > plus the Procfile concurrency bump. The body is kept as written on Aug 4 as
 > the historical record; read `ankita_server.py` as today's
 > `ceo_live_server.py`. `backfill_missing_calls.py` reconciles any calls
-> dropped before the fix deployed.
+> dropped before the fix deployed. The "same pattern in siblings" follow-up
+> below is moot: `maya_server.py` was deleted (a test instance is now the
+> same entry point with different env) and `ceo_live_server.py` IS the fixed
+> file.
 
 **TL;DR:** The server scores calls *inside* the webhook request on a **single
 sync gunicorn worker**. Vapi only waits ~10s for a webhook response; scoring a

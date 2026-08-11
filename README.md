@@ -34,8 +34,6 @@ Runs on Railway; **pushing to `main` auto-redeploys production.**
 
 - `ceo_live_server.py` — **production entry point** (Procfile). Webhook, A/B
   routing, background scoring, SMS mirror + survey, `/sms`, `/dashboard`.
-- `maya_server.py` — spare test instance (writes to `maya_test_calls`; no SMS,
-  scores in-request).
 - `server_lib.py` — shared machinery: judge runners, transcript re-fetch,
   `ceo_id` extraction, A/B arm helpers, sim-table diversion, Supabase writer.
 - `dashboard.py` + `dashboard_template.html` — the live A/B boards.
@@ -60,6 +58,11 @@ Runs on Railway; **pushing to `main` auto-redeploys production.**
 - A redeploy kills scoring that is mid-flight (the ack already happened, the
   judges were still running). Deploy in quiet hours, then run
   `backfill_missing_calls.py` to catch anything lost.
+- **Running a test instance:** don't fork the code — run a second Railway
+  service on the same repo and entry point with different env:
+  `SUPABASE_TABLE=maya_test_calls` (or any table with the same shape; see
+  `migrations/000_init.sql`), SMS vars unset, `DASHBOARD_TOKEN` its own value.
+  Point a test Vapi assistant's webhook at that service's URL.
 
 ## Environment variables (Railway dashboard)
 
