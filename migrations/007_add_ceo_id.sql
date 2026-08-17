@@ -15,6 +15,10 @@
 -- All four tables get the column because server_lib.handle_call_webhook builds one row
 -- shape for every instance (ankita_server / maya_server / ceo_live_server) — only
 -- ankita_test_calls receives traffic today, but a Procfile swap must not start 500ing.
+--
+-- HISTORICAL — do not replay: `ankita_test_calls` was renamed `ceo_live_calls`
+-- by migration 011 and `maya_test_calls` no longer exists, so those two ALTERs
+-- now error on a missing table. Fresh project: run 000_init.sql instead.
 
 ALTER TABLE ankita_test_calls ADD COLUMN IF NOT EXISTS ceo_id TEXT;
 ALTER TABLE maya_test_calls   ADD COLUMN IF NOT EXISTS ceo_id TEXT;

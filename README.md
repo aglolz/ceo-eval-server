@@ -60,7 +60,7 @@ Runs on Railway; **pushing to `main` auto-redeploys production.**
   `backfill_missing_calls.py` to catch anything lost.
 - **Running a test instance:** don't fork the code — run a second Railway
   service on the same repo and entry point with different env:
-  `SUPABASE_TABLE=maya_test_calls` (or any table with the same shape; see
+  `SUPABASE_TABLE=test_calls` (or any table with the same shape; see
   `migrations/000_init.sql`), SMS vars unset, `DASHBOARD_TOKEN` its own value.
   Point a test Vapi assistant's webhook at that service's URL.
 
@@ -107,7 +107,7 @@ Simulation + tuning:
 ## Database (Supabase)
 
 Tables: `ceo_live_calls` (production scores; formerly `ankita_test_calls`,
-renamed by migration 011), `maya_test_calls`, `sim_calls`, `feedback_sms`,
+renamed by migration 011), `test_calls`, `sim_calls`, `feedback_sms`,
 `participant_demographics`.
 
 - **Fresh project:** run `migrations/000_init.sql` once — it creates the full

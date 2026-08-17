@@ -8,7 +8,9 @@
 --
 -- Tables:
 --   ceo_live_calls            — production scored calls (the webhook default)
---   maya_test_calls           — maya_server.py's test instance
+--   test_calls                — optional test instance (a second Railway
+--                               service on the same entry point, with
+--                               SUPABASE_TABLE=test_calls)
 --   sim_calls                 — simulation traffic diverted by SIM_ASSISTANT_IDS
 --   feedback_sms              — post-call SMS survey state + answers
 --   participant_demographics  — pre-bucketed Salesforce join for the dashboard
@@ -21,7 +23,7 @@
 -- One verdict/reasoning/scan column triple per judge; verdict is
 -- pass | fail | na | error, scan holds the verbatim evidence quote
 -- ({"evidence": "..."}). Add a new triple (see README "Adding a new judge")
--- to ceo_live_calls AND sim_calls (and maya_test_calls if you use it) when a
+-- to ceo_live_calls AND sim_calls (and test_calls if you use it) when a
 -- judge ships.
 
 CREATE TABLE IF NOT EXISTS ceo_live_calls (
@@ -79,8 +81,8 @@ CREATE TABLE IF NOT EXISTS ceo_live_calls (
 -- columns + the call_id unique index; note the copied id DEFAULT means these
 -- share ceo_live_calls' id sequence — fine here (nothing joins or refers to
 -- id; call_id is the real key).
-CREATE TABLE IF NOT EXISTS maya_test_calls (LIKE ceo_live_calls INCLUDING ALL);
-CREATE TABLE IF NOT EXISTS sim_calls       (LIKE ceo_live_calls INCLUDING ALL);
+CREATE TABLE IF NOT EXISTS test_calls (LIKE ceo_live_calls INCLUDING ALL);
+CREATE TABLE IF NOT EXISTS sim_calls  (LIKE ceo_live_calls INCLUDING ALL);
 
 -- Post-call SMS feedback survey (see sms_feedback.py; migration 006).
 CREATE TABLE IF NOT EXISTS feedback_sms (
@@ -125,7 +127,7 @@ GRANT SELECT, INSERT, UPDATE ON ALL TABLES    IN SCHEMA public TO anon, authenti
 GRANT USAGE,  SELECT         ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;
 
 ALTER TABLE ceo_live_calls           DISABLE ROW LEVEL SECURITY;
-ALTER TABLE maya_test_calls          DISABLE ROW LEVEL SECURITY;
+ALTER TABLE test_calls               DISABLE ROW LEVEL SECURITY;
 ALTER TABLE sim_calls                DISABLE ROW LEVEL SECURITY;
 ALTER TABLE feedback_sms             DISABLE ROW LEVEL SECURITY;
 ALTER TABLE participant_demographics DISABLE ROW LEVEL SECURITY;
