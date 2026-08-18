@@ -1,0 +1,85 @@
+dimension: quality_conversational_flow
+
+definition: >
+  Did the conversation mechanically work as a spoken back-and-forth?
+  This dimension scores conversational MECHANICS ONLY — turn-taking,
+  recovery from hiccups, and correct firing of the off-topic guardrail.
+  Verbosity / feedback length is scored under limits_the_load, NOT here.
+  A single minor hiccup that the coach recovers from gracefully does not
+  fail the call; the fail line is repeated mechanical breakdown.
+
+pass: >
+  Clean turn-taking: the coach asks, waits until the user has finished
+  developing their answer, and responds to what they actually said.
+  Hiccups (mishearing, garbled audio, an interrupted turn) are
+  recovered gracefully — the coach re-asks or clarifies and the session
+  moves on. IMPORTANT — transcription noise is not a breakdown: these
+  are speech-to-text transcripts, so a coach turn that is merely SPLIT
+  mid-sentence across the user's speech reads as an artifact of
+  transcription, not an interruption. The test for a true STT split:
+  the coach's fragments CONTINUE one unfinished sentence (joining them
+  reads as a single utterance) and the user only backchannels in
+  between ("Okay.", "Yes."). Two further kinds of incident are noise,
+  not coach breakdowns: (a) interruptions caused by the USER or the
+  channel — keypad presses mid-turn, the user talking over the coach,
+  "are you still there?" connection checks, and re-prompts at a silent
+  user ("Take your time.") — when the coach acknowledges, resumes, and
+  completes its thought; (b) the coach's OWN delivery getting chopped
+  or restarted (fragments, or a verbatim restart of the same feedback
+  sentence) when the complete thought still lands exactly once and the
+  session proceeds — that is transcription/latency noise. The guardrail
+  redirect ("I'm here to help you practice for a job interview...")
+  PASSES when it fires at genuinely off-topic input (e.g., unrelated
+  chatter, background audio, requests outside interview practice).
+
+fail: >
+  Repeated mechanical breakdowns. Fail signals include:
+
+  REPEATED CUT-INS ON THE USER'S FLOW: the coach starts responding or
+  giving feedback while the user is still developing their answer. A
+  cut-in is recognizable because the coach's turn OPENS a new
+  evaluative reaction ("That's a good start", "That's a solid example
+  of", "Great.") while the user is still mid-answer — unlike an STT
+  split, which merely continues an unfinished sentence. The telltale
+  pattern: the user's next turn continues the answer with new content,
+  and the coach's praise or feedback then restarts or repeats itself
+  (e.g., AI: "That's a great strength to" / User: "And I also never
+  miss a shift." / AI: "that's a great strength."). If this happens on
+  TWO OR MORE separate exchanges, the call FAILS even if it never
+  derails and nothing is ultimately lost — repeatedly chopping the
+  user's flow is itself the mechanical breakdown this dimension exists
+  to catch. COUNTING RULE: an incident counts toward this threshold
+  ONLY when the coach's new evaluative reaction interrupts the USER's
+  in-progress answer. Do NOT count incidents triggered by the user or
+  the channel (keypad entries, talk-over, connection checks, silence
+  re-prompts) that the coach handles gracefully, and do NOT count the
+  coach's own chopped or restarted delivery when the completed thought
+  lands once — those are noise, per the pass rules. But a genuine
+  coach-on-user cut-in counts even when the session recovers and
+  nothing is ultimately lost. When torn between "STT split" and
+  "cut-in" on a turn that opens over the user's in-progress answer,
+  the restarted reaction marks a cut-in: count it.
+
+  REPEATED RE-DELIVERY OF THE SAME REMINDER: before scoring, check
+  this explicitly — does the coach deliver substantially the same
+  reminder, warning, or correction (for example, a privacy or
+  don't-share-your-name reminder) at THREE OR MORE separate points in
+  the session? If yes, the call FAILS: recurring re-delivery is a
+  loop, not a recovery. This holds even when each delivery completes,
+  even when the wording varies between deliveries, and even when the
+  user's behavior re-triggers the reminder. (A reminder delivered once
+  or twice, or restarts confined to a single exchange, are not this
+  signal.)
+
+  Other fail signals: the coach answers its own question without
+  waiting; the conversation loops (the same question or feedback
+  repeats without progress); duplicated or stacked coach turns; or the
+  guardrail MISFIRES on a legitimate on-task request (e.g., the user
+  says "Provide an example." or asks for help with the current question
+  and gets the off-topic redirect instead). One isolated, recovered
+  hiccup is not a fail — look for a repeated pattern or an unrecovered
+  breakdown.
+
+na: >
+  Not applicable is essentially never correct — conversational flow is
+  observable in every session that has any back-and-forth at all.

@@ -40,10 +40,10 @@ logger = logging.getLogger(__name__)
 # Production instance: all judges live
 JUDGES = [
     {"name": "limits_the_load", "prompt": "limits_the_load.md"},
-    {"name": "feedback_q_low_bar", "prompt": "feedback_question_low_bar.md"},
+    {"name": "feedback_q_low_bar", "prompt": "feedback_question_low_bar_v18_hero.md"},
     {"name": "drives_practice", "prompt": "drives_practice_v1_hero.yaml"},
     {"name": "scaffolds_then_fades", "prompt": "scaffolds_then_fades_v4_hero.yaml"},
-    {"name": "quality_conversational_flow", "prompt": "quality_conversational_flow_v5_hero.yaml"},
+    {"name": "quality_conversational_flow", "prompt": "quality_conversational_flow_v11_hero.yaml"},
     {"name": "adapts_when_stuck", "prompt": "adapts_when_stuck_v5_hero.yaml"},
     {"name": "reentry_appropriate_framing", "prompt": "reentry_appropriate_framing_v4_hero.yaml"},
     {"name": "pii", "prompt": "pii_v4_hero.yaml"},
