@@ -253,5 +253,7 @@ columns, ceo_id, arm label, sim calls, feedback_sms, participant_demographics, a
 rename of the live table to `ceo_live_calls`). On a fresh database run `000_init.sql`, then
 the numbered migrations in order.
 
-**Related docs:** Doc 3 (judge changes & recalibration) · Doc 4 (what data is sensitive and
+**Related docs:** Doc 3, the Judge Methodology & Calibration Playbook
+(`judge-suite/JUDGE_PLAYBOOK.md` in the `ceo_voice_coach` repo — judge changes &
+recalibration) · Doc 4 (what data is sensitive and
 why the dashboard stays behind auth) · Doc 6 (what's deliberately not built).
