@@ -43,6 +43,10 @@ Participant phone call
   There are no per-person server variants: a **test instance is a second Railway service
   on this same repo and Procfile with different env** (see README, "Running a test
   instance").
+- **Production service:** `https://web-production-b69cfd.up.railway.app` (Railway, CEO
+  workspace). `GET /` is the health check and returns the live instance name, judge list,
+  and table names. The dashboard lives at `/dashboard/live?key=<DASHBOARD_TOKEN>` — the
+  token is in Railway env, not written down here.
 - **Secret store:** Railway service env vars. Full reference in the Appendix.
 - **Migrations:** `migrations/` in the repo — `000_init.sql` (full-schema bootstrap for a
   fresh database) plus the incremental `002`–`011`. Supabase SQL editor runs them by hand;
@@ -110,8 +114,13 @@ vars and the live Vapi assistant names on their own.
 ### Read logs / check health
 - Logs: Railway → service → Logs (deploy + runtime). Judge errors and Supabase write
   failures log per-call with the Vapi `call_id`.
-- Health: `GET /` returns 200 when the app is up. If Railway shows the service crashed,
-  the logs' last stack trace is almost always the answer.
+- Health: `GET /` returns 200 when the app is up:
+
+      curl -s https://web-production-b69cfd.up.railway.app/
+
+  A healthy response names the instance (`ceo_live`), the nine judges, and the tables it
+  writes to — useful on its own for confirming which instance you are looking at. If
+  Railway shows the service crashed, the logs' last stack trace is almost always the answer.
 
 ### Replay a failed webhook payload
 Vapi retries transient failures, but if a call never scored:
@@ -119,7 +128,8 @@ Vapi retries transient failures, but if a call never scored:
    the transcript + call id).
 2. POST it to the server yourself:
    ```
-   curl -X POST https://<service-url>/webhook -H "Content-Type: application/json" -d @payload.json
+   curl -X POST https://web-production-b69cfd.up.railway.app/webhook \
+        -H "Content-Type: application/json" -d @payload.json
    ```
 3. Confirm the row landed in Supabase (table `ceo_live_calls`, key `call_id`). Inserts are
    idempotent on `call_id`, so replaying a call that already scored is safe.
