@@ -125,12 +125,16 @@ vars and the live Vapi assistant names on their own.
   that touches `prompts/` or the `JUDGES` list. If Railway shows the service crashed, the
   logs' last stack trace is almost always the answer.
 
-**If a deploy did not take:** Railway needs its GitHub App to have access to the source repo.
-When the service settings show the repo but report *"GitHub Repo not found"* under the branch
-selector, the connection is broken and **pushes do not deploy** — the service keeps serving the
-last successful build with no error anywhere except that settings page. Re-grant the Railway
-GitHub App access to the repo (an owner of the GitHub org may have to approve the install),
-then confirm a branch appears in the selector and redeploy.
+**Verifying a deploy, in the right order.** A build takes a couple of minutes, so a health
+check run straight after `git push` will still show the *old* response and look like a failed
+deploy. Watch Railway → the service → **Deployments** until the newest entry reads ACTIVE with
+"Deployment successful" (it names the commit and the source, e.g. `CEO-Coachlink/ACE  main`),
+**then** curl the health endpoint.
+
+If a deploy never appears at all, the usual cause is the GitHub link: when the service settings
+show the repo but report *"GitHub Repo not found"* under the branch selector, Railway's GitHub App
+cannot read the repo and pushes stop triggering builds, with no error anywhere else. Re-grant the
+Railway GitHub App access to the repo — an owner of the GitHub org may need to approve the install.
 
 ### Replay a failed webhook payload
 Vapi retries transient failures, but if a call never scored:
