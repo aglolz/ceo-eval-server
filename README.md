@@ -38,6 +38,10 @@ Runs on Railway; **pushing to `main` auto-redeploys production.**
   `ceo_id` extraction, A/B arm helpers, sim-table diversion, Supabase writer.
 - `dashboard.py` + `dashboard_template.html` — the live A/B boards.
 - `sms_feedback.py` — the 2-question survey state machine.
+- `sync_demographics.py` — pulls the Coefficient-synced `ceo codes for ai
+  pilot` sheet tab and upserts rolled-up demographics into
+  `participant_demographics` (the dashboard's facet join). Runs as a Railway
+  cron service; `--dry-run` first.
 - `backfill_missing_calls.py` — reconciles Vapi against Supabase and re-scores
   any call that never landed (run `--dry-run` first; scoring bills the API).
 - `prompts/` — one file per judge (see "Judges").
@@ -99,6 +103,13 @@ Dashboard:
   Access via `/dashboard?key=<token>`.
 - `DASHBOARD_CACHE_SEC` — rebuild interval (default 120).
 
+Demographics feed:
+- `DEMOGRAPHICS_SHEET_URL` — Apps Script web-app `/exec` URL serving the
+  `ceo codes for ai pilot` tab as JSON (see
+  `ceo_voice_coach/docs/runbooks/demographics_sheet_apps_script.md`).
+- `DEMOGRAPHICS_SHEET_TOKEN` — shared secret that endpoint checks. The URL +
+  token together read participant demographics: treat both as secrets.
+
 Simulation + tuning:
 - `SIM_ASSISTANT_IDS` — comma-separated assistantIds to divert to `SIM_TABLE`
   (default `sim_calls`).
@@ -118,6 +129,40 @@ renamed by migration 011), `test_calls`, `sim_calls`, `feedback_sms`,
 Each judge occupies a column triple on the call tables: `<name>_verdict`
 (`pass` | `fail` | `na` | `error`), `<name>_reasoning`, `<name>_scan` (JSONB,
 the verbatim evidence quote).
+
+## Demographics refresh (scheduled)
+
+The dashboard's site/population/age/gender/race/education facets come from
+`participant_demographics`, joined on `ceo_id` at build time. That table is kept
+current by `sync_demographics.py`:
+
+    Salesforce --(Coefficient)--> "ceo codes for ai pilot" sheet tab
+      --(Apps Script web app, token-gated JSON)--> sync_demographics.py
+      --> Supabase participant_demographics --> /dashboard
+
+Age is bucketed and gender/race collapsed **in the script**, so raw ages and
+free-text categories never reach Supabase. Upsert is on `ceo_id`, so a refresh
+extends coverage for new enrollees and overwrites stale rows; it never deletes.
+
+Set it up as a **second Railway service on this same repo**: Settings → set the
+custom start command to `python sync_demographics.py` and the Cron Schedule to
+`0 6 * * *` (daily 06:00 UTC — Coefficient's own refresh should land before it).
+Give it the same `SUPABASE_*` + `DEMOGRAPHICS_*` env vars. A cron service runs,
+exits, and bills only for the seconds it runs.
+
+The dashboard caches demographics for 30 minutes (`fetch_demographics()`), so a
+fresh sync shows up within half an hour without a redeploy.
+
+First run, before scheduling anything:
+
+    python sync_demographics.py --dry-run
+
+That prints the tab's real headers, the column mapping it resolved, and one
+rolled-up sample row. If a facet reports "no column for ...", add the sheet's
+actual header spelling to `COLUMNS` in `sync_demographics.py`.
+
+Superseded: `ceo_voice_coach/push_demographics.py` (hand-dropped Salesforce
+`report*.csv`, run on a laptop). Keep it as the break-glass path.
 
 ## Judges
 

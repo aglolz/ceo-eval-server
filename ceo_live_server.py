@@ -185,6 +185,10 @@ def health():
         "status": "ok",
         "instance": "ceo_live",
         "judges": [j["name"] for j in JUDGES],
+        # Prompt filenames, not just dimension names: this is the only way to tell
+        # from outside which judge VERSIONS a running deploy is actually serving.
+        # The name list alone is identical across prompt promotions.
+        "prompts": {j["name"]: j["prompt"] for j in JUDGES},
         "table": TABLE,
         "sim_table": os.environ.get("SIM_TABLE", "sim_calls"),
         "sim_assistant_ids": [s.strip() for s in os.environ.get("SIM_ASSISTANT_IDS", "").split(",") if s.strip()],

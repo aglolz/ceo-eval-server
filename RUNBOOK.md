@@ -118,9 +118,19 @@ vars and the live Vapi assistant names on their own.
 
       curl -s https://web-production-b69cfd.up.railway.app/
 
-  A healthy response names the instance (`ceo_live`), the nine judges, and the tables it
-  writes to — useful on its own for confirming which instance you are looking at. If
-  Railway shows the service crashed, the logs' last stack trace is almost always the answer.
+  A healthy response names the instance (`ceo_live`), the nine judges **and the prompt file
+  each one is running**, and the tables it writes to. The `prompts` map is the only way to
+  confirm from outside which judge *versions* a deploy is serving — the dimension names stay
+  identical across a prompt promotion, so they cannot tell you. Check it after any deploy
+  that touches `prompts/` or the `JUDGES` list. If Railway shows the service crashed, the
+  logs' last stack trace is almost always the answer.
+
+**If a deploy did not take:** Railway needs its GitHub App to have access to the source repo.
+When the service settings show the repo but report *"GitHub Repo not found"* under the branch
+selector, the connection is broken and **pushes do not deploy** — the service keeps serving the
+last successful build with no error anywhere except that settings page. Re-grant the Railway
+GitHub App access to the repo (an owner of the GitHub org may have to approve the install),
+then confirm a branch appears in the selector and redeploy.
 
 ### Replay a failed webhook payload
 Vapi retries transient failures, but if a call never scored:
