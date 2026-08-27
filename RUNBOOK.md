@@ -146,7 +146,27 @@ Vapi retries transient failures, but if a call never scored:
         -H "Content-Type: application/json" -d @payload.json
    ```
 3. Confirm the row landed in Supabase (table `ceo_live_calls`, key `call_id`). Inserts are
-   idempotent on `call_id`, so replaying a call that already scored is safe.
+   idempotent on `call_id`, so replaying a call that already scored will not duplicate the row.
+
+> **The Supabase write is idempotent. The rest of the pipeline is NOT.**
+> For a live (non-sim) `end-of-call-report`, the handler fires the SMS pipeline *before*
+> scoring: it mirrors the call to Zapier for the summary text, and starts the two-question
+> participant survey against the number in `call.customer.number`. **Replaying a real
+> participant's call therefore texts that participant again** — a duplicate summary and a
+> fresh survey, possibly weeks after their call. Nothing about the request looks unusual when
+> it happens.
+>
+> Before replaying a live call, either set `FEEDBACK_SMS_ENABLED=0` and clear
+> `ZAPIER_SMS_HOOK_URL` for the duration, or blank `call.customer.number` in the payload you
+> POST. To exercise the pipeline *without* touching a participant at all, replay under a
+> simulation `assistantId` (any id in `SIM_ASSISTANT_IDS`): `resolve_table` marks it as sim,
+> which skips both SMS paths and writes to `sim_calls` instead. That is the right shape for a
+> post-transfer smoke test.
+
+**Verified end-to-end 2026-08-27** by exactly that method: a synthetic persona transcript
+POSTed under the sim assistant id returned `{"status":"accepted"}` in 0.27s (the fast-ack path),
+scored on all nine judges, and landed one row in `sim_calls` with no verdict column left
+unscored and nothing written to `ceo_live_calls`.
 
 ### Rebuild the dashboard manually
 The `/dashboard` routes rebuild from Supabase on a timer in-process. To force a rebuild,
